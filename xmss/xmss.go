@@ -5,7 +5,9 @@ package xmss
 
 /*
 #cgo CFLAGS: -I${SRCDIR}
-#cgo LDFLAGS: ${SRCDIR}/libxmss.a -lstdc++
+#cgo LDFLAGS: ${SRCDIR}/libxmss.a
+#cgo !darwin LDFLAGS: -lstdc++
+#cgo darwin LDFLAGS: -lc++
 
 #include "xmss.h"
 */

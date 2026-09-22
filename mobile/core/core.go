@@ -1,0 +1,271 @@
+// Package core exposes the upstream Oyster wallet in-process to iOS via gomobile.
+// It starts no RPC listener and never exports private keys to a server.
+package core
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/pearl-research-labs/pearl/node/btcutil"
+	"github.com/pearl-research-labs/pearl/node/chaincfg"
+	"github.com/pearl-research-labs/pearl/node/txscript"
+	"github.com/pearl-research-labs/pearl/node/wire"
+	neutrino "github.com/pearl-research-labs/pearl/spv"
+	"github.com/pearl-research-labs/pearl/wallet/chain"
+	"github.com/pearl-research-labs/pearl/wallet/waddrmgr"
+	"github.com/pearl-research-labs/pearl/wallet/wallet"
+	"github.com/pearl-research-labs/pearl/wallet/walletdb"
+	_ "github.com/pearl-research-labs/pearl/wallet/walletdb/bdb"
+	bip39 "github.com/tyler-smith/go-bip39"
+)
+
+var mu sync.Mutex
+var loader *wallet.Loader
+var active *wallet.Wallet
+var client *chain.NeutrinoClient
+var service *neutrino.ChainService
+var spvDB walletdb.DB
+var cancel context.CancelFunc
+var directory string
+var params *chaincfg.Params
+
+// Initialize selects an app-private directory and network before opening a wallet.
+func Initialize(path, network string) (bool, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if active != nil {
+		return false, errors.New("close the wallet before changing networks")
+	}
+	if !filepath.IsAbs(path) {
+		return false, errors.New("wallet directory must be absolute")
+	}
+	switch network {
+	case "mainnet":
+		params = &chaincfg.MainNetParams
+	case "testnet2":
+		params = &chaincfg.TestNet2Params
+	default:
+		return false, errors.New("unsupported network")
+	}
+	directory = filepath.Join(path, network)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		return false, err
+	}
+	loader = wallet.NewLoader(params, directory, false, 10*time.Second, 250)
+	return loader.WalletExists()
+}
+
+// GenerateMnemonic uses the same BIP39 entropy and derivation as Oyster.
+func GenerateMnemonic() (string, error) {
+	entropy, err := bip39.NewEntropy(256)
+	if err != nil {
+		return "", err
+	}
+	defer clear(entropy)
+	return bip39.NewMnemonic(entropy)
+}
+
+// Create restores a BIP39 wallet. birthday=0 scans from genesis.
+// The mnemonic is never persisted; the upstream database encrypts private keys.
+func Create(mnemonic, password string, birthday int64) error {
+	mu.Lock()
+	defer mu.Unlock()
+	if loader == nil {
+		return errors.New("initialize first")
+	}
+	if active != nil {
+		return errors.New("wallet already open")
+	}
+	if len(password) < 10 {
+		return errors.New("use a password of at least 10 characters")
+	}
+	mnemonic = strings.Join(strings.Fields(strings.ToLower(mnemonic)), " ")
+	if !bip39.IsMnemonicValid(mnemonic) {
+		return errors.New("invalid BIP39 recovery phrase")
+	}
+	if birthday < 0 || birthday > time.Now().Unix() {
+		return errors.New("invalid wallet birthday")
+	}
+	seed := bip39.NewSeed(mnemonic, "")
+	defer clear(seed)
+	w, err := loader.CreateNewWallet([]byte(wallet.InsecurePubPassphrase), []byte(password), seed, time.Unix(birthday, 0))
+	if err != nil {
+		return err
+	}
+	active = w
+	return nil
+}
+
+// Open verifies the private passphrase and immediately relocks signing keys.
+func Open(password string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	if loader == nil {
+		return errors.New("initialize first")
+	}
+	if active != nil {
+		return errors.New("wallet already open")
+	}
+	w, err := loader.OpenExistingWallet([]byte(wallet.InsecurePubPassphrase), false)
+	if err != nil {
+		return err
+	}
+	if err = w.Unlock([]byte(password), nil); err != nil {
+		_ = loader.UnloadWallet()
+		return err
+	}
+	w.Lock()
+	active = w
+	return nil
+}
+
+// StartSync connects directly to Pearl peers using the upstream SPV verifier.
+func StartSync() error {
+	mu.Lock()
+	defer mu.Unlock()
+	if active == nil {
+		return errors.New("wallet is closed")
+	}
+	if client != nil {
+		return nil
+	}
+	db, err := walletdb.Create("bdb", filepath.Join(directory, "neutrino.db"), false, 10*time.Second, false)
+	if err != nil {
+		return err
+	}
+	s, err := neutrino.NewChainService(neutrino.Config{DataDir: directory, Database: db, ChainParams: *params})
+	if err != nil {
+		_ = db.Close()
+		return err
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	c := chain.NewNeutrinoClient(params, s)
+	if err = c.Start(ctx); err != nil {
+		stop()
+		_ = s.Stop()
+		_ = db.Close()
+		return err
+	}
+	spvDB, service, client, cancel = db, s, c, stop
+	active.SynchronizeRPC(c)
+	return nil
+}
+
+// Status returns exact atomic-unit balances and the most recent transactions.
+func Status() (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if active == nil {
+		return "", errors.New("wallet is closed")
+	}
+	balance, err := active.CalculateBalance(1)
+	if err != nil {
+		return "", err
+	}
+	total, err := active.CalculateBalance(0)
+	if err != nil {
+		return "", err
+	}
+	txs, err := active.ListTransactions(0, 50)
+	if err != nil {
+		return "", err
+	}
+	var height, peerHeight int32
+	if client != nil {
+		progress, e := client.SyncProgress()
+		if e != nil {
+			return "", e
+		}
+		height, peerHeight = progress.HeaderHeight, progress.BestPeerHeight
+	}
+	data, err := json.Marshal(map[string]any{
+		"balance": int64(balance), "pending": int64(total - balance),
+		"synced": active.ChainSynced(), "height": height, "peerHeight": peerHeight,
+		"transactions": txs,
+	})
+	return string(data), err
+}
+
+// ReceiveAddress reuses the current unused BIP86 address, matching Oyster.
+func ReceiveAddress() (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if active == nil {
+		return "", errors.New("wallet is closed")
+	}
+	addr, err := active.CurrentAddress(waddrmgr.DefaultAccountNum, waddrmgr.KeyScopeBIP0086)
+	if err != nil {
+		return "", err
+	}
+	return addr.EncodeAddress(), nil
+}
+
+func validatePayment(address string, atoms, feePerKB int64, net *chaincfg.Params) ([]byte, error) {
+	if atoms <= 0 || atoms > btcutil.MaxGrain {
+		return nil, errors.New("invalid amount")
+	}
+	if feePerKB < 1000 || feePerKB > 10000000 {
+		return nil, errors.New("fee must be 1,000–10,000,000 atomic units/kB")
+	}
+	addr, err := btcutil.DecodeAddress(strings.TrimSpace(address), net)
+	if err != nil || !addr.IsForNet(net) {
+		return nil, errors.New("invalid address for this network")
+	}
+	return txscript.PayToAddrScript(addr)
+}
+
+// Send signs locally and broadcasts once. Call only after explicit confirmation.
+// Amount and fee use integers to avoid floating point rounding.
+func Send(address string, atoms, feePerKB int64, password string) (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if active == nil || !active.ChainSynced() {
+		return "", errors.New("wait for wallet synchronization")
+	}
+	script, err := validatePayment(address, atoms, feePerKB, params)
+	if err != nil {
+		return "", err
+	}
+	if err = active.Unlock([]byte(password), nil); err != nil {
+		return "", err
+	}
+	defer active.Lock()
+	scope := waddrmgr.KeyScopeBIP0086
+	tx, err := active.SendOutputs([]*wire.TxOut{wire.NewTxOut(atoms, script)}, &scope,
+		waddrmgr.DefaultAccountNum, 1, btcutil.Amount(feePerKB), wallet.CoinSelectionLargest, "")
+	if err != nil {
+		return "", err
+	}
+	return tx.TxHash().String(), nil
+}
+
+// Close flushes databases and stops network work when the app backgrounds.
+func Close() error {
+	mu.Lock()
+	defer mu.Unlock()
+	if active == nil {
+		return nil
+	}
+	active.Lock()
+	if cancel != nil {
+		cancel()
+		cancel = nil
+	}
+	err := loader.UnloadWallet()
+	if service != nil {
+		err = errors.Join(err, service.Stop())
+		service = nil
+	}
+	if spvDB != nil {
+		err = errors.Join(err, spvDB.Close())
+		spvDB = nil
+	}
+	active, client = nil, nil
+	return err
+}

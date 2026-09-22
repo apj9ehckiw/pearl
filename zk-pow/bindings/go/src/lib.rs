@@ -3,10 +3,10 @@
 //! This crate provides C-compatible FFI functions for ZK proof generation and verification,
 //! primarily used by the Go pearld node.
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "ios")))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "ios")))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 

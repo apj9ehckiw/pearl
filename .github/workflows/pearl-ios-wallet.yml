@@ -1,0 +1,78 @@
+name: Pearl iOS Wallet
+on:
+  push:
+    branches: ['codex/ios-wallet', master]
+    paths: ['mobile/**', 'apps/ios/**', '.github/workflows/pearl-ios-wallet.yml', 'go.mod', 'go.sum', 'xmss/**', 'zk-pow/**', 'wallet/**', 'spv/**', 'node/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.repository == 'apj9ehckiw/pearl'
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          workspaces: |
+            zk-pow -> target
+            zk-pow/bindings/go -> target
+      - name: Install build tools
+        run: |
+          brew install xcodegen
+          go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260908204917-8b95e45f8d3e
+          go install golang.org/x/mobile/cmd/gobind@v0.0.0-20260908204917-8b95e45f8d3e
+          gomobile init
+      - name: Test mobile core
+        run: go test ./mobile/core
+      - name: Build native wallet and cryptographic libraries
+        run: bash mobile/build-ios.sh
+      - name: Generate Xcode project
+        working-directory: apps/ios
+        run: |
+          sips --padToHeightWidth 564 564 Resources/Assets.xcassets/AppIcon.appiconset/Icon.png
+          sips --resampleHeightWidth 1024 1024 Resources/Assets.xcassets/AppIcon.appiconset/Icon.png
+          xcodegen generate
+      - name: Test on iOS Simulator
+        working-directory: apps/ios
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for k,v in d["devices"].items() if "iOS" in k for x in v if "iPhone" in x["name"]))')
+          xcodebuild test -project PearlWallet.xcodeproj -scheme PearlWallet \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build/DerivedData -resultBundlePath build/Tests.xcresult CODE_SIGNING_ALLOWED=NO
+      - name: Archive iPhone app
+        working-directory: apps/ios
+        run: |
+          xcodebuild archive -project PearlWallet.xcodeproj -scheme PearlWallet \
+            -destination 'generic/platform=iOS' -archivePath build/PearlWallet.xcarchive \
+            CODE_SIGNING_ALLOWED=NO
+          mkdir -p build/package/Payload
+          cp -R build/PearlWallet.xcarchive/Products/Applications/PearlWallet.app build/package/Payload/
+          (cd build/package && zip -qry ../PearlWallet-unsigned.ipa Payload)
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PearlWallet-iOS-${{ github.run_number }}
+          path: |
+            apps/ios/build/PearlWallet-unsigned.ipa
+            apps/ios/build/PearlWallet.xcarchive
+            apps/ios/build/DerivedData/Build/Products/Debug-iphonesimulator/PearlWallet.app
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS-test-results
+          path: apps/ios/build/Tests.xcresult
+          if-no-files-found: ignore

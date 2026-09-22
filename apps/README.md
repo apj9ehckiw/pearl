@@ -4,6 +4,11 @@ This monorepo contains the user-facing applications for the Pearl blockchain net
 
 ## 📦 Applications
 
+### Pearl Wallet for iOS
+
+Native SwiftUI wallet with an on-device Oyster/SPV core and GitHub Actions builds.
+See [iOS build and installation instructions](./ios/README.md).
+
 ### 🌐 Landing Page (`@pearl/pearl-website`)
 
 The official landing page for the Pearl blockchain network, built with React and Vite. It provides
