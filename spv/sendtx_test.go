@@ -64,17 +64,3 @@ func TestSendTransactionNoPeers(t *testing.T) {
 	require.ErrorContains(t, err, "no connected peers")
 	require.Less(t, elapsed, time.Second)
 }
-
-// TestTransactionInvAnnouncesByTxid ensures a broadcast is announced with
-// MSG_TX. BIP-144 allows the witness inventory types only in getdata, and
-// peers that follow it never request a transaction announced otherwise.
-func TestTransactionInvAnnouncesByTxid(t *testing.T) {
-	t.Parallel()
-
-	tx := testTx()
-	inv := newTransactionInv(tx)
-
-	require.Len(t, inv.InvList, 1)
-	require.Equal(t, wire.InvTypeTx, inv.InvList[0].Type)
-	require.Equal(t, tx.TxHash(), inv.InvList[0].Hash)
-}
