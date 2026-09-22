@@ -24,6 +24,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
+          cache-on-failure: true
           workspaces: |
             zk-pow -> target
             zk-pow/bindings/go -> target
@@ -34,9 +35,24 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@v0.0.0-20260908204917-8b95e45f8d3e
           gomobile init
       - name: Test mobile core
-        run: go test ./mobile/core
+        run: |
+          go test -race -timeout 120s ./mobile/core ./spv/headerfs
+          go test -race -timeout 120s ./wallet/chain -run '^TestNeutrino'
+      - name: Restore native iOS framework
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: apps/ios/Frameworks/PearlCore.xcframework
+          key: ios16-arm64-core-${{ hashFiles('mobile/**', 'go.mod', 'go.sum', 'node/**', 'wallet/**', 'spv/**', 'xmss/**', 'zk-pow/**', 'plonky2/**', 'pearl-blake3/**') }}
       - name: Build native wallet and cryptographic libraries
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: bash mobile/build-ios.sh
+      - name: Cache native iOS framework
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: apps/ios/Frameworks/PearlCore.xcframework
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Generate Xcode project
         working-directory: apps/ios
         run: |
@@ -50,6 +66,9 @@ jobs:
           xcodebuild test -project PearlWallet.xcodeproj -scheme PearlWallet \
             -destination "platform=iOS Simulator,id=$DEVICE_ID" \
             -derivedDataPath build/DerivedData -resultBundlePath build/Tests.xcresult CODE_SIGNING_ALLOWED=NO
+          xcrun simctl launch "$DEVICE_ID" app.pearlwallet.ios
+          sleep 3
+          xcrun simctl io "$DEVICE_ID" screenshot build/PearlWallet-simulator.png
       - name: Archive iPhone app
         working-directory: apps/ios
         run: |
@@ -65,6 +84,7 @@ jobs:
           name: PearlWallet-iOS-${{ github.run_number }}
           path: |
             apps/ios/build/PearlWallet-unsigned.ipa
+            apps/ios/build/PearlWallet-simulator.png
             apps/ios/build/PearlWallet.xcarchive
             apps/ios/build/DerivedData/Build/Products/Debug-iphonesimulator/PearlWallet.app
           if-no-files-found: error

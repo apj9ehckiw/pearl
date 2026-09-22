@@ -14,10 +14,10 @@ actor WalletEngine {
         resource.isExcludedFromBackup = true
         var excluded = root
         try excluded.setResourceValues(resource)
-        var exists = false
+        var exists = ObjCBool(false)
         var error: NSError?
         guard CoreInitialize(root.path, network, &exists, &error) else { throw failure(error) }
-        return exists
+        return exists.boolValue
     }
 
     func mnemonic() throws -> String {

@@ -138,9 +138,8 @@ func (s *NeutrinoClient) Start(ctx context.Context) error {
 
 // Stop replicates the RPC client's Stop method.
 //
-// TODO(mstreet3): The Stop method does not cancel the long-running rescan
-// goroutine.  This is a memory leak.  Stop should shutdown the rescan goroutine
-// and reset the scanning state of the NeutrinoClient to false.
+// Cancel the rescan as well as notifications so in-process mobile clients can
+// release their databases before reopening the wallet.
 func (s *NeutrinoClient) Stop() {
 	s.clientMtx.Lock()
 	defer s.clientMtx.Unlock()
@@ -149,11 +148,28 @@ func (s *NeutrinoClient) Stop() {
 	}
 	close(s.quit)
 	s.started = false
+	if s.rescanQuit != nil {
+		select {
+		case <-s.rescanQuit:
+		default:
+			close(s.rescanQuit)
+		}
+	}
+	s.scanning = false
 }
 
 // WaitForShutdown replicates the RPC client's WaitForShutdown method.
 func (s *NeutrinoClient) WaitForShutdown() {
 	s.wg.Wait()
+	// A concurrent Rescan call may still be installing its rescan instance.
+	s.rescanMtx.Lock()
+	s.clientMtx.Lock()
+	rescan := s.rescan
+	s.clientMtx.Unlock()
+	s.rescanMtx.Unlock()
+	if rescan != nil {
+		rescan.WaitForShutdown()
+	}
 }
 
 // GetBlock replicates the RPC client's GetBlock command.

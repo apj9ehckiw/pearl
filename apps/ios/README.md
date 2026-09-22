@@ -70,7 +70,8 @@ are not committed. Build from a clean checkout when rebuilding the XCFramework.
 ## Validation
 
 `go test ./mobile/core` checks BIP39 generation, network/amount validation and
-lifecycle guards without native libraries. The iOS workflow builds with both
+lifecycle guards, encrypted database reopen, offline SPV shutdown and receiving
+address persistence without native libraries. The iOS workflow builds with both
 `xmss,zkpow` production tags and executes XCTest amount parsing tests on a simulator.
 Building successfully does not constitute a real-funds or mainnet recovery test;
 verify restore, synchronization and send/receive on testnet before holding funds.

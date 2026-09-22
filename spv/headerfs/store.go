@@ -2,6 +2,7 @@ package headerfs
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -194,6 +195,18 @@ type headerStore struct {
 	*headerFile
 
 	*headerIndex
+}
+
+// Close releases the flat file after its owner has stopped all readers and
+// writers. The shared index database remains owned by the caller.
+func (h *headerStore) Close() error {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+	err := h.file.Close()
+	if errors.Is(err, os.ErrClosed) {
+		return nil
+	}
+	return err
 }
 
 // newHeaderStore creates a new headerStore given an already open database, a

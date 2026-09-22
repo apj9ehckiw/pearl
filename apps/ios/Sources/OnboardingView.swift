@@ -76,7 +76,7 @@ struct OnboardingView: View {
                     }
                     if wallet.busy { ProgressView("Opening wallet…") }
                     Text("Community edition · Powered by Pearl / Oyster").font(.caption).foregroundStyle(.secondary).padding(.top, 16)
-                }.padding(26)
+                }.padding(26).disabled(!wallet.initialized)
             }.onChange(of: phase) { value in if value == .background { reset() } }
         }
     }

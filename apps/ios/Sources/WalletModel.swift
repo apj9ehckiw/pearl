@@ -5,6 +5,7 @@ final class WalletModel: ObservableObject {
     @Published var exists = false
     @Published var unlocked = false
     @Published var busy = false
+    @Published var initialized = false
     @Published var error: String?
     @Published var snapshot: WalletSnapshot?
     @Published var receiveAddress = ""
@@ -13,11 +14,15 @@ final class WalletModel: ObservableObject {
     private let engine = WalletEngine.shared
 
     func initialize() async {
-        do { exists = try await engine.initialize(network: network) }
+        initialized = false
+        do { exists = try await engine.initialize(network: network); initialized = true }
         catch { self.error = error.localizedDescription }
     }
 
     func changeNetwork(_ value: String) async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
         await lock()
         network = value
         UserDefaults.standard.set(value, forKey: "network")
@@ -38,7 +43,9 @@ final class WalletModel: ObservableObject {
             unlocked = true
             try await engine.sync()
             guard request == generation else { return }
-            receiveAddress = try await engine.address()
+            let address = try await engine.address()
+            guard request == generation else { return }
+            receiveAddress = address
             let result = try await engine.status()
             if request == generation { snapshot = result }
         } catch { self.error = error.localizedDescription }

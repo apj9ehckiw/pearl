@@ -1,12 +1,112 @@
 package core
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"net"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pearl-research-labs/pearl/node/btcutil"
 	"github.com/pearl-research-labs/pearl/node/chaincfg"
+	neutrino "github.com/pearl-research-labs/pearl/spv"
 	bip39 "github.com/tyler-smith/go-bip39"
 )
+
+func TestEncryptedWalletRoundTrip(t *testing.T) {
+	root := t.TempDir()
+	exists, err := Initialize(root, "testnet2")
+	if err != nil || exists {
+		t.Fatalf("initialize: %v", err)
+	}
+	phrase, err := GenerateMnemonic()
+	if err != nil {
+		t.Fatal(err)
+	}
+	password := "test-only-passphrase-42"
+	if err := Create(phrase, password, time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = Close() })
+	if _, err := Initialize(root, "mainnet"); err == nil {
+		t.Fatal("switched an open wallet")
+	}
+	if err := Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "testnet2", "wallet.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(phrase)) || bytes.Contains(data, []byte(password)) {
+		t.Fatal("plaintext secret persisted")
+	}
+	exists, err = Initialize(root, "testnet2")
+	if err != nil || !exists {
+		t.Fatalf("wallet missing after close: %v", err)
+	}
+	if err := Open("wrong-password"); err == nil {
+		t.Fatal("opened with wrong password")
+	}
+	if err := Open(password); err != nil {
+		t.Fatal(err)
+	}
+	status, err := Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot struct {
+		Balance int64
+		Synced  bool
+	}
+	if err := json.Unmarshal([]byte(status), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Balance != 0 || snapshot.Synced {
+		t.Fatal("unexpected fresh wallet state")
+	}
+	if !active.Locked() {
+		t.Fatal("opening left private keys unlocked")
+	}
+	startOffline := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if err := startSync(neutrino.Config{
+			ConnectPeers: []string{"127.0.0.1:1"},
+			Dialer:       func(net.Addr) (net.Conn, error) { return nil, errors.New("offline test") },
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	startOffline()
+	address, err := ReceiveAddress()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := btcutil.DecodeAddress(address, &chaincfg.TestNet2Params); err != nil {
+		t.Fatal(err)
+	}
+	if err := Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := Open(password); err != nil {
+		t.Fatal(err)
+	}
+	startOffline()
+	reopenedAddress, err := ReceiveAddress()
+	if err != nil || address != reopenedAddress {
+		t.Fatalf("receive address changed after restart: %v", err)
+	}
+	if err := Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestMnemonic(t *testing.T) {
 	a, err := GenerateMnemonic()

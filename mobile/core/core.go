@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,6 +130,12 @@ func Open(password string) error {
 func StartSync() error {
 	mu.Lock()
 	defer mu.Unlock()
+	return startSync(neutrino.Config{})
+}
+
+// startSync requires mu; allowing a supplied transport makes lifecycle tests
+// independent of public peers without changing production consensus checks.
+func startSync(config neutrino.Config) error {
 	if active == nil {
 		return errors.New("wallet is closed")
 	}
@@ -139,7 +146,9 @@ func StartSync() error {
 	if err != nil {
 		return err
 	}
-	s, err := neutrino.NewChainService(neutrino.Config{DataDir: directory, Database: db, ChainParams: *params})
+	config.DataDir, config.Database, config.ChainParams = directory, db, *params
+	config.BroadcastTimeout = 15 * time.Second
+	s, err := neutrino.NewChainService(config)
 	if err != nil {
 		_ = db.Close()
 		return err
@@ -149,6 +158,7 @@ func StartSync() error {
 	if err = c.Start(ctx); err != nil {
 		stop()
 		_ = s.Stop()
+		_ = closeHeaders(s)
 		_ = db.Close()
 		return err
 	}
@@ -258,8 +268,12 @@ func Close() error {
 		cancel = nil
 	}
 	err := loader.UnloadWallet()
+	if client != nil {
+		client.WaitForShutdown()
+	}
 	if service != nil {
 		err = errors.Join(err, service.Stop())
+		err = errors.Join(err, closeHeaders(service))
 		service = nil
 	}
 	if spvDB != nil {
@@ -267,5 +281,15 @@ func Close() error {
 		spvDB = nil
 	}
 	active, client = nil, nil
+	return err
+}
+
+func closeHeaders(s *neutrino.ChainService) error {
+	var err error
+	for _, store := range []any{s.BlockHeaders, s.RegFilterHeaders} {
+		if closer, ok := store.(io.Closer); ok {
+			err = errors.Join(err, closer.Close())
+		}
+	}
 	return err
 }

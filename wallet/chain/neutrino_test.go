@@ -15,6 +15,24 @@ import (
 // maxDur is the max duration a test has to execute successfully.
 var maxDur = 5 * time.Second
 
+// Stopping an embedded wallet must cancel its rescan before files are closed.
+func TestNeutrinoClientStopCancelsRescan(t *testing.T) {
+	nc := newMockNeutrinoClient()
+	require.NoError(t, nc.Start(t.Context()))
+	require.NoError(t, nc.NotifyReceived(nil))
+	quit := nc.rescanQuit
+	require.NotNil(t, quit)
+	nc.Stop()
+	nc.Stop() // Shutdown is idempotent.
+	nc.WaitForShutdown()
+	select {
+	case <-quit:
+	default:
+		t.Fatal("rescan remained active after Stop")
+	}
+	require.False(t, nc.scanning)
+}
+
 // TestNeutrinoClientSequentialStartStop ensures that the client
 // can sequentially Start and Stop without errors or races.
 func TestNeutrinoClientSequentialStartStop(t *testing.T) {
