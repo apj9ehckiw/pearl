@@ -14,7 +14,6 @@ import (
 	"github.com/pearl-research-labs/pearl/node/txscript"
 	"github.com/pearl-research-labs/pearl/node/wire"
 	neutrino "github.com/pearl-research-labs/pearl/spv"
-	"github.com/pearl-research-labs/pearl/spv/pushtx"
 	"github.com/pearl-research-labs/pearl/wallet/chain"
 	"github.com/pearl-research-labs/pearl/wallet/waddrmgr"
 	"github.com/pearl-research-labs/pearl/wallet/walletdb"
@@ -154,7 +153,7 @@ func TestGhostPendingSendRegression(t *testing.T) {
 	require.ErrorIs(t, err, chain.ErrTxNotRelayed, "ghost pending: %s", state)
 	require.ErrorContains(t, err, "no connected peers")
 	require.Nil(t, tx)
-	require.Less(t, elapsed, pushtx.DefaultBroadcastTimeout)
+	require.Less(t, elapsed, neutrino.DefaultBroadcastTimeout)
 
 	require.Empty(t, unmined, state)
 	require.Len(t, unspent, 1, state)
