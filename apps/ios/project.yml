@@ -18,6 +18,9 @@ targets:
     dependencies:
       - framework: Frameworks/PearlCore.xcframework
         embed: false
+      - sdk: libc++.tbd
+      - sdk: libresolv.tbd
+      - sdk: Security.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.pearlwallet.ios
