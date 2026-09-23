@@ -1,0 +1,34 @@
+services:
+  pearl-mainnet:
+    build:
+      context: ../..
+      dockerfile: node/Dockerfile
+    command:
+      - --datadir=/data
+      - --norpc
+      - --listen=0.0.0.0:44108
+    ports:
+      - "44108:44108/tcp"
+    volumes:
+      - pearl-mainnet-data:/data
+    restart: unless-stopped
+
+  pearl-testnet2:
+    profiles: [testnet2]
+    build:
+      context: ../..
+      dockerfile: node/Dockerfile
+    command:
+      - --testnet2
+      - --datadir=/data
+      - --norpc
+      - --listen=0.0.0.0:44112
+    ports:
+      - "44112:44112/tcp"
+    volumes:
+      - pearl-testnet2-data:/data
+    restart: unless-stopped
+
+volumes:
+  pearl-mainnet-data:
+  pearl-testnet2-data:

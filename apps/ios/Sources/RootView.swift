@@ -23,7 +23,6 @@ struct RootView: View {
             AddressBookView().tabItem { Label("地址簿", systemImage: "person.crop.rectangle.stack") }.tag(3)
             SettingsView().tabItem { Label("设置", systemImage: "gearshape") }.tag(4)
         }
-        .onChange(of: selectedTab) { _ in wallet.noteActivity() }
         .task {
             while !Task.isCancelled {
                 await wallet.refresh()
@@ -202,12 +201,26 @@ struct SettingsView: View {
     @AppStorage("backgroundNotificationsEnabled") private var backgroundNotificationsEnabled = false
     @State private var setupPassword = ""
     @State private var showExport = false
+    @State private var peerDraft = ""
     var body: some View {
         NavigationStack {
             Form {
                 Section("网络") {
                     Text(wallet.network == "mainnet" ? "Pearl 主网" : "Pearl 测试网 2")
                     Text("锁定钱包后可切换网络。").font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("同步节点") {
+                    LabeledContent("当前", value: wallet.syncPeer.isEmpty ? "自动连接公共节点" : wallet.syncPeer)
+                    TextField("自建节点，例如 node.example.com:44108", text: $peerDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    Button("保存并锁定钱包") {
+                        Task { await wallet.configureSyncPeer(peerDraft) }
+                    }
+                    .disabled(wallet.busy || peerDraft.trimmingCharacters(in: .whitespacesAndNewlines) == wallet.syncPeer)
+                    Text("留空可恢复公共节点自动发现。自建地址是 Pearl P2P 节点，不是 HTTP API；节点会缓存区块链数据，手机仍会验证收到的区块头。保存后重新解锁以连接新节点。")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("外观") {
                     Picker("显示模式", selection: $appearance) {
@@ -218,7 +231,7 @@ struct SettingsView: View {
                 }
                 Section("安全") {
                     Label("钱包已加密并保存在本机", systemImage: "iphone.gen3")
-                    Label("钱包会在闲置超时后自动锁定", systemImage: "lock.shield")
+                    Label("钱包在后台超时后自动锁定", systemImage: "lock.shield")
                     if let name = wallet.biometricName {
                         if wallet.biometricEnabled {
                             Label("已启用\(name)解锁", systemImage: name == "触控 ID" ? "touchid" : "faceid")
@@ -247,10 +260,10 @@ struct SettingsView: View {
                 }
                 Section("自动锁定") {
                     Stepper(value: $autoLockMinutes, in: 1...60) {
-                        Label("闲置 \(autoLockMinutes) 分钟后锁定", systemImage: "timer")
+                        Label("后台 \(autoLockMinutes) 分钟后锁定", systemImage: "timer")
                     }
                     Toggle("切到后台立即锁定", isOn: $lockImmediatelyOnBackground)
-                    Text("关闭立即锁定时，返回应用只会在超过设定的闲置时间后要求重新解锁。")
+                    Text("前台使用时不会自动锁定。关闭立即锁定后，应用从后台返回时会检查停留时长；超过设定时间才要求重新解锁。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("通知") {
@@ -276,6 +289,7 @@ struct SettingsView: View {
                     Link("查看源代码", destination: URL(string: "https://github.com/apj9ehckiw/pearl/tree/codex/ios-wallet/apps/ios")!)
                 }
             }.navigationTitle("设置")
+                .onAppear { peerDraft = wallet.syncPeer }
                 .sheet(isPresented: $showExport) { SecretExportView() }
                 .onChange(of: phase) { value in if value == .background { setupPassword = "" } }
         }

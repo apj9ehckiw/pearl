@@ -6,6 +6,7 @@ actor WalletEngine {
     static let shared = WalletEngine()
     private var notificationSession = false
     private var normalSession = false
+    private var selectedNetwork = "mainnet"
 
     func initialize(network: String) throws -> Bool {
         if notificationSession { try close() }
@@ -20,6 +21,7 @@ actor WalletEngine {
         var exists = ObjCBool(false)
         var error: NSError?
         guard CoreInitialize(root.path, network, &exists, &error) else { throw failure(error) }
+        selectedNetwork = network
         return exists.boolValue
     }
 
@@ -82,7 +84,15 @@ actor WalletEngine {
 
     func sync() throws {
         var error: NSError?
-        guard CoreStartSync(&error) else { throw failure(error) }
+        let peer = UserDefaults.standard.string(forKey: "syncPeer.\(selectedNetwork)") ?? ""
+        guard CoreStartSyncWithPeer(peer, &error) else { throw failure(error) }
+    }
+
+    func normalizeSyncPeer(_ address: String) throws -> String {
+        var error: NSError?
+        let result = CoreNormalizeSyncPeer(address, &error)
+        if let error { throw error }
+        return result
     }
 
     func status() throws -> WalletSnapshot {

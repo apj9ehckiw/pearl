@@ -9,7 +9,8 @@ fork, not an official Pearl Research Labs release.
 - Create a 24-word BIP39 wallet, with backup verification before creation.
 - Restore an Oyster-compatible BIP39 mnemonic (no extra BIP39 passphrase).
 - Private keys encrypted by Oyster in the app sandbox; no remote wallet service.
-- Direct SPV synchronization, with **XMSS and ZK verification enabled**.
+- SPV synchronization through public peers or a user-selected self-hosted Pearl
+  P2P node, with **XMSS and ZK verification enabled**.
 - BIP86 Pearl receiving address, QR code and share sheet.
 - Local, network-specific address book with validated destinations and send-time picking.
 - Confirmed/pending balances, latest 50 activity entries, local signing and broadcast.
@@ -22,8 +23,8 @@ fork, not an official Pearl Research Labs release.
   item that requires a device passcode and the current biometric enrollment.
 - Native iOS 26 Liquid Glass tab bar when built with Xcode 26; standard system
   tab bar remains on earlier iOS versions.
-- Privacy cover when inactive, idle auto-lock after a user-selected 1–60 minutes,
-  and an optional immediate lock when the app backgrounds.
+- Privacy cover when inactive, auto-lock after a user-selected 1–60 minutes in
+  the background, and an optional immediate lock when the app backgrounds.
 - Optional private local notifications for new incoming transactions. iOS schedules
   opportunistic background refreshes, so delivery can be delayed or skipped.
 - Password-gated export of the encrypted recovery phrase or the current BIP86
@@ -34,6 +35,15 @@ The app should stay in the foreground for initial synchronization. Restoring sca
 from genesis, which can take time and storage. Background refresh is short and
 system-controlled; synchronization resumes when the app becomes active. Locking
 closes the database and peer connections. No RPC port is opened on the phone.
+The auto-lock timer does not run while the app is in the foreground. Because iOS
+can suspend apps, the background duration is checked before showing the wallet
+again; enabling immediate background lock closes it at once.
+To use your own chain-data cache, follow the
+[self-hosted node deployment guide](../../deploy/ios-sync-node/README.md), then
+enter its host and P2P port under Settings → Sync Node. This endpoint is not an
+HTTP API; a header-only HTTP service cannot supply the compact filters and
+blocks needed by this wallet. Public peer discovery remains available by
+clearing the setting. Each network has its own endpoint.
 The encrypted recovery phrase is saved only for wallets created or imported by
 this version. Earlier wallet databases cannot reconstruct the original BIP39
 words; use the offline backup made at creation. The single-address WIF needs a

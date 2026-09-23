@@ -48,7 +48,6 @@ struct SecretExportView: View {
                             UIPasteboard.general.setItems(
                                 [[UTType.utf8PlainText.identifier: secret.value]],
                                 options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(60)])
-                            wallet.noteActivity()
                         }
                         Button("立即隐藏") { hide() }
                     }

@@ -11,15 +11,17 @@ final class WalletModel: ObservableObject {
     @Published var syncRemaining: TimeInterval?
     @Published var receiveAddress = ""
     @Published var network = UserDefaults.standard.string(forKey: "network") ?? "mainnet"
+    @Published var syncPeer = ""
     @Published var biometricName: String?
     @Published var biometricEnabled = false
     private var generation = 0
-    private var lastActivity = Date()
+    private var backgroundEnteredAt: Date?
     private var syncEstimator = SyncEstimator()
     private let engine = WalletEngine.shared
 
     func initialize() async {
         initialized = false
+        syncPeer = UserDefaults.standard.string(forKey: "syncPeer.\(network)") ?? ""
         biometricName = BiometricStore.availableName()
         biometricEnabled = UserDefaults.standard.bool(forKey: biometricKey)
         do { exists = try await engine.initialize(network: network); initialized = true }
@@ -106,7 +108,7 @@ final class WalletModel: ObservableObject {
     private func finishOpening(request: Int) async throws {
         guard request == generation else { try await engine.close(); return }
         unlocked = true
-        noteActivity()
+        backgroundEnteredAt = nil
         try await engine.sync()
         guard request == generation else { return }
         let address = try await engine.address()
@@ -144,19 +146,38 @@ final class WalletModel: ObservableObject {
         syncRemaining = nil
         syncEstimator = SyncEstimator()
         receiveAddress = ""
+        backgroundEnteredAt = nil
         do { try await engine.close() }
         catch { self.error = message(error) }
     }
 
-    func noteActivity() {
-        lastActivity = Date()
+    func enteredBackground(at date: Date = Date()) {
+        backgroundEnteredAt = date
     }
 
-    func lockIfExpired() async {
-        guard unlocked, !busy else { return }
+    func lockAfterBackground(immediately: Bool, now: Date = Date()) async {
+        guard let enteredAt = backgroundEnteredAt else { return }
+        backgroundEnteredAt = nil
+        guard unlocked else { return }
         let configured = UserDefaults.standard.integer(forKey: "autoLockMinutes")
-        if AutoLockPolicy.shouldLock(since: lastActivity, now: Date(), configuredMinutes: configured) {
+        if immediately || AutoLockPolicy.shouldLock(backgroundEnteredAt: enteredAt,
+            now: now, configuredMinutes: configured) {
             await lock()
+        }
+    }
+
+    func configureSyncPeer(_ address: String) async {
+        guard unlocked, !busy else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let normalized = try await engine.normalizeSyncPeer(address)
+            guard normalized != syncPeer else { return }
+            UserDefaults.standard.set(normalized, forKey: "syncPeer.\(network)")
+            syncPeer = normalized
+            await lock()
+        } catch {
+            self.error = "节点地址无效。请输入主机名或 IP，可附加端口；不要输入 HTTP URL。"
         }
     }
 
@@ -164,10 +185,8 @@ final class WalletModel: ObservableObject {
         guard unlocked, !busy else { return nil }
         busy = true
         defer { busy = false }
-        noteActivity()
         do {
             let txid = try await engine.send(address: address, grains: amount, fee: fee, password: password)
-            noteActivity()
             return txid
         }
         catch { self.error = "\(message(error))\n重试前请先查看交易记录；交易可能已经广播。"; return nil }
@@ -177,21 +196,13 @@ final class WalletModel: ObservableObject {
         guard unlocked, biometricEnabled, biometricName != nil, !busy else { return nil }
         busy = true
         defer { busy = false }
-        noteActivity()
         let request = generation
         let selectedNetwork = network
         do {
             let password = try await BiometricStore.shared.read(network: selectedNetwork,
                 reason: "验证并发送 \(PearlAmount.display(amount)) PRL")
             guard request == generation, unlocked, selectedNetwork == network else { return nil }
-            if AutoLockPolicy.shouldLock(since: lastActivity, now: Date(),
-                configuredMinutes: UserDefaults.standard.integer(forKey: "autoLockMinutes")) {
-                self.error = "闲置时间已到，钱包已锁定。请重新解锁后重试转账。"
-                await lock()
-                return nil
-            }
             let txid = try await engine.send(address: address, grains: amount, fee: fee, password: password)
-            noteActivity()
             return txid
         } catch BiometricStoreError.cancelled {
             return nil
@@ -216,7 +227,6 @@ final class WalletModel: ObservableObject {
                 secret = WalletSecret(value: key.wif, address: key.address)
             }
             guard request == generation, unlocked else { return nil }
-            noteActivity()
             return secret
         } catch {
             self.error = message(error)
@@ -272,8 +282,8 @@ struct WalletSecret {
 }
 
 enum AutoLockPolicy {
-    static func shouldLock(since lastActivity: Date, now: Date, configuredMinutes: Int) -> Bool {
+    static func shouldLock(backgroundEnteredAt: Date, now: Date, configuredMinutes: Int) -> Bool {
         let minutes = configuredMinutes > 0 ? min(configuredMinutes, 60) : 5
-        return now.timeIntervalSince(lastActivity) >= TimeInterval(minutes * 60)
+        return now.timeIntervalSince(backgroundEnteredAt) >= TimeInterval(minutes * 60)
     }
 }

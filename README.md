@@ -3,7 +3,7 @@
 [![Pearl iOS Wallet](https://github.com/apj9ehckiw/pearl/actions/workflows/pearl-ios-wallet.yml/badge.svg?branch=codex%2Fios-wallet)](https://github.com/apj9ehckiw/pearl/actions/workflows/pearl-ios-wallet.yml)
 
 本 fork 提供独立运行的 iOS Pearl Wallet：手机内创建/恢复钱包、保存加密私钥、SPV 同步与本地签名。
-查看 [iOS 构建和安装说明](apps/ios/README.md)，在 [本仓库的 iOS Actions](https://github.com/apj9ehckiw/pearl/actions/workflows/pearl-ios-wallet.yml) 下载构建产物。
+查看 [iOS 构建和安装说明](apps/ios/README.md)及[自建同步节点部署说明](deploy/ios-sync-node/README.md)，在 [本仓库的 iOS Actions](https://github.com/apj9ehckiw/pearl/actions/workflows/pearl-ios-wallet.yml) 下载构建产物。
 开发分支为 `codex/ios-wallet`；不向原作者仓库提交 PR。
 
 <details>

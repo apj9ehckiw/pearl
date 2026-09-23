@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -219,9 +221,81 @@ func CheckPassword(password string) error {
 
 // StartSync connects directly to Pearl peers using the upstream SPV verifier.
 func StartSync() error {
+	return StartSyncWithPeer("")
+}
+
+// NormalizeSyncPeer validates a Pearl P2P address and fills the selected
+// network's default port. This endpoint supplies headers, filters and blocks;
+// it is not an HTTP API or a wallet RPC server.
+func NormalizeSyncPeer(peer string) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	return startSync(neutrino.Config{})
+	return normalizeSyncPeer(peer)
+}
+
+func normalizeSyncPeer(peer string) (string, error) {
+	peer = strings.TrimSpace(peer)
+	if peer == "" {
+		return "", nil
+	}
+	if params == nil {
+		return "", errors.New("initialize first")
+	}
+	if strings.ContainsAny(peer, "/?#@ \t\r\n") || strings.Contains(peer, "://") {
+		return "", errors.New("invalid Pearl P2P peer address")
+	}
+	if ip := net.ParseIP(peer); ip != nil {
+		peer = net.JoinHostPort(ip.String(), params.DefaultPort)
+	} else if strings.HasPrefix(peer, "[") && strings.HasSuffix(peer, "]") {
+		host := strings.TrimSuffix(strings.TrimPrefix(peer, "["), "]")
+		if net.ParseIP(host) == nil {
+			return "", errors.New("invalid Pearl P2P peer address")
+		}
+		peer = net.JoinHostPort(host, params.DefaultPort)
+	} else if !strings.Contains(peer, ":") {
+		peer = net.JoinHostPort(peer, params.DefaultPort)
+	}
+	host, port, err := net.SplitHostPort(peer)
+	if err != nil || host == "" {
+		return "", errors.New("invalid Pearl P2P peer address")
+	}
+	if net.ParseIP(host) == nil {
+		if len(host) > 253 || strings.HasPrefix(host, ".") || strings.HasSuffix(host, ".") {
+			return "", errors.New("invalid Pearl P2P peer address")
+		}
+		for _, label := range strings.Split(host, ".") {
+			if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+				return "", errors.New("invalid Pearl P2P peer address")
+			}
+			for _, char := range label {
+				if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') &&
+					(char < '0' || char > '9') && char != '-' {
+					return "", errors.New("invalid Pearl P2P peer address")
+				}
+			}
+		}
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return "", errors.New("invalid Pearl P2P peer address")
+	}
+	return net.JoinHostPort(host, strconv.Itoa(portNumber)), nil
+}
+
+// StartSyncWithPeer restricts SPV traffic to the selected self-hosted Pearl
+// node. The existing verifier still checks the received chain data locally.
+func StartSyncWithPeer(peer string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	address, err := normalizeSyncPeer(peer)
+	if err != nil {
+		return err
+	}
+	config := neutrino.Config{}
+	if address != "" {
+		config.ConnectPeers = []string{address}
+	}
+	return startSync(config)
 }
 
 // startSync requires mu; allowing a supplied transport makes lifecycle tests
