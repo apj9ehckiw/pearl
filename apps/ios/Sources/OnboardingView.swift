@@ -52,7 +52,7 @@ struct OnboardingView: View {
                     } else if mode == "welcome" {
                         action("创建钱包") {
                             do { phrase = try await WalletEngine.shared.mnemonic(); mode = "create" }
-                            catch { wallet.error = error.localizedDescription }
+                            catch { wallet.error = "无法生成恢复短语，请重试。" }
                         }
                         Button("使用恢复短语导入") { mode = "restore" }.frame(maxWidth: .infinity)
                     } else {

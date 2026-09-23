@@ -159,7 +159,12 @@ final class WalletModel: ObservableObject {
         if lower.contains("invalid bip39") { return "恢复短语无效，请检查 24 个英文单词及顺序。" }
         if lower.contains("insufficient") { return "余额不足，或余额不足以支付手续费。" }
         if lower.contains("invalid address") { return "地址无效，或与当前网络不匹配。" }
+        if lower.contains("invalid amount") { return "发送金额无效。" }
+        if lower.contains("fee must") { return "手续费率超出允许范围。" }
+        if lower.contains("wallet is closed") { return "钱包已锁定，请重新解锁。" }
+        if lower.contains("wallet already open") { return "钱包已经打开。" }
+        if lower.contains("at least 10 characters") { return "钱包密码至少需要 10 个字符。" }
         if lower.contains("wallet synchronization") { return "请等待钱包同步完成。" }
-        return "操作失败：\(detail)"
+        return "操作失败，请检查网络连接或稍后重试。"
     }
 }
