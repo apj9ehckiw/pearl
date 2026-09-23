@@ -98,6 +98,14 @@ struct DashboardView: View {
                                 }
                             }
                         }
+                        if let lastSyncedAt = wallet.lastSyncedAt {
+                            Label("最近同步：\(lastSyncedAt.formatted(date: .numeric, time: .shortened))",
+                                  systemImage: "clock.arrow.circlepath")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Label("最近同步：尚未完成", systemImage: "clock.arrow.circlepath")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         Text("请保持应用打开以完成同步。导入钱包需要从区块链起点扫描。")
                             .font(.footnote).foregroundStyle(.secondary)
                         Button("重新连接") { Task { await wallet.retrySync() } }.disabled(wallet.busy)

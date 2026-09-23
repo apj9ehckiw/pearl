@@ -14,6 +14,8 @@ fork, not an official Pearl Research Labs release.
 - BIP86 Pearl receiving address, QR code and share sheet.
 - Local, network-specific address book with validated destinations and send-time picking.
 - Confirmed/pending balances, latest 50 activity entries, local signing and broadcast.
+- Wallet dashboard shows the last completed sync time for the selected network;
+  the send form has a keyboard-dismiss control for numeric entry.
 - Animated synchronization indicator and a rough ETA based on wallet scan progress.
 - Mainnet and testnet2 with separate databases.
 - Simplified Chinese interface with system, light and dark appearance options.

@@ -75,6 +75,7 @@ enum BackgroundNotifications {
                 try Task.checkCancellation()
                 let snapshot = try await WalletEngine.shared.status()
                 if snapshot.synced {
+                    if LastSyncTime.isCurrent(snapshot) { LastSyncTime.record(network: network) }
                     await record(snapshot, network: network, alert: true)
                     completed = true
                     break

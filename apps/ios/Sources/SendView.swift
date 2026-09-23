@@ -12,6 +12,8 @@ struct SendView: View {
     @State private var authorization = "password"
     @State private var confirming = false
     @State private var txid: String?
+    @FocusState private var focusedField: Field?
+    private enum Field: Hashable { case address, amount, fee, password }
     private var grains: Int64? { PearlAmount.grains(amount) }
     private var validFee: Int64? {
         guard let value = Int64(fee), (1000...10000000).contains(value) else { return nil }
@@ -36,15 +38,19 @@ struct SendView: View {
                     }
                 } else {
                     Section("收款方") {
-                        TextField("Pearl 地址", text: $address).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("Pearl 地址", text: $address)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .focused($focusedField, equals: .address)
                         Button("从地址簿选择") { showAddressBook = true }
                     }
                     Section("金额") {
                         TextField("PRL", text: $amount).keyboardType(.decimalPad)
+                            .focused($focusedField, equals: .amount)
                         if let balance = wallet.snapshot?.balance { Text("已确认余额：\(PearlAmount.display(balance)) PRL").font(.caption) }
                     }
                     Section {
                         TextField("每 kB 的最小单位数", text: $fee).keyboardType(.numberPad)
+                            .focused($focusedField, equals: .fee)
                     } header: { Text("网络费率 · grains / kB") }
                     footer: { Text("1 PRL = 100,000,000 grains。实际手续费随交易大小变化，会在发送金额之外扣除。最低费率为 1,000 grains/kB。") }
                     Section("授权签名") {
@@ -56,13 +62,14 @@ struct SendView: View {
                         }
                         if !biometricAuthorization {
                             SecureField("钱包密码", text: $password).textContentType(.password)
+                                .focused($focusedField, equals: .password)
                         } else {
                             Label("确认转账后验证生物识别", systemImage: "checkmark.shield")
                                 .foregroundStyle(.secondary)
                         }
                         Text("确认前请核对地址、金额和费率。").font(.footnote)
                     }
-                    Button("核对转账") { confirming = true }
+                    Button("核对转账") { focusedField = nil; confirming = true }
                         .disabled(grains == nil || validFee == nil ||
                             (!biometricAuthorization && password.isEmpty) ||
                             address.isEmpty || wallet.busy || wallet.snapshot?.synced != true)
@@ -71,7 +78,15 @@ struct SendView: View {
             }
             .disabled(wallet.busy)
             .navigationTitle("发送 Pearl")
-            .toolbar { Button("完成") { password = ""; dismiss() }.disabled(wallet.busy) }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") { password = ""; dismiss() }.disabled(wallet.busy)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("收起键盘") { focusedField = nil }
+                }
+            }
             .interactiveDismissDisabled(wallet.busy)
             .sheet(isPresented: $showAddressBook) {
                 AddressBookPickerView { entry in address = entry.address }

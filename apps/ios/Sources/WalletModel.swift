@@ -9,6 +9,7 @@ final class WalletModel: ObservableObject {
     @Published var error: String?
     @Published var snapshot: WalletSnapshot?
     @Published var syncRemaining: TimeInterval?
+    @Published var lastSyncedAt: Date?
     @Published var receiveAddress = ""
     @Published var network = UserDefaults.standard.string(forKey: "network") ?? "mainnet"
     @Published var syncPeer = ""
@@ -22,6 +23,7 @@ final class WalletModel: ObservableObject {
     func initialize() async {
         initialized = false
         syncPeer = UserDefaults.standard.string(forKey: "syncPeer.\(network)") ?? ""
+        lastSyncedAt = LastSyncTime.load(network: network)
         biometricName = BiometricStore.availableName()
         biometricEnabled = UserDefaults.standard.bool(forKey: biometricKey)
         do { exists = try await engine.initialize(network: network); initialized = true }
@@ -239,6 +241,10 @@ final class WalletModel: ObservableObject {
 
     private func accept(_ result: WalletSnapshot) async {
         snapshot = result
+        lastSyncedAt = LastSyncTime.load(network: network)
+        if LastSyncTime.isCurrent(result) {
+            lastSyncedAt = LastSyncTime.record(network: network)
+        }
         syncRemaining = syncEstimator.update(walletHeight: result.walletHeight,
                                              peerHeight: result.peerHeight,
                                              synced: result.synced)
@@ -265,6 +271,29 @@ final class WalletModel: ObservableObject {
         if lower.contains("at least 10 characters") { return "钱包密码至少需要 10 个字符。" }
         if lower.contains("wallet synchronization") { return "请等待钱包同步完成。" }
         return "操作失败，请检查网络连接或稍后重试。"
+    }
+}
+
+enum LastSyncTime {
+    private static func key(_ network: String) -> String { "lastSyncedAt.\(network)" }
+
+    static func load(network: String) -> Date? {
+        UserDefaults.standard.object(forKey: key(network)) as? Date
+    }
+
+    static func isCurrent(_ snapshot: WalletSnapshot) -> Bool {
+        snapshot.synced && snapshot.peerHeight > 0 &&
+            snapshot.height >= snapshot.peerHeight && snapshot.walletHeight >= snapshot.peerHeight
+    }
+
+    @discardableResult
+    static func record(network: String, at date: Date = Date()) -> Date {
+        if let previous = load(network: network) {
+            let elapsed = date.timeIntervalSince(previous)
+            if elapsed >= 0 && elapsed < 60 { return previous }
+        }
+        UserDefaults.standard.set(date, forKey: key(network))
+        return date
     }
 }
 
