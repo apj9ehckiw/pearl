@@ -76,27 +76,12 @@ jobs:
           mkdir -p build/package/Payload
           cp -R build/PearlWallet.xcarchive/Products/Applications/PearlWallet.app build/package/Payload/
           (cd build/package && zip -qry ../PearlWallet-unsigned.ipa Payload)
-      - name: Capture simulator preview
-        working-directory: apps/ios
-        timeout-minutes: 3
-        continue-on-error: true
-        run: |
-          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for k,v in d["devices"].items() if "iOS" in k for x in v if "iPhone" in x["name"]))')
-          # XCTest can shut down its simulator. A stalled reboot must not block
-          # the already-tested device archive and unsigned IPA.
-          xcrun simctl boot "$DEVICE_ID" || true
-          xcrun simctl bootstatus "$DEVICE_ID" -b
-          xcrun simctl install "$DEVICE_ID" build/DerivedData/Build/Products/Debug-iphonesimulator/PearlWallet.app
-          xcrun simctl launch "$DEVICE_ID" app.pearlwallet.ios
-          sleep 3
-          xcrun simctl io "$DEVICE_ID" screenshot build/PearlWallet-simulator.png
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PearlWallet-iOS-${{ github.run_number }}
           path: |
             apps/ios/build/PearlWallet-unsigned.ipa
-            apps/ios/build/PearlWallet-simulator.png
             apps/ios/build/PearlWallet.xcarchive
             apps/ios/build/DerivedData/Build/Products/Debug-iphonesimulator/PearlWallet.app
           if-no-files-found: error
