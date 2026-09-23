@@ -11,6 +11,12 @@ struct SyncEstimator {
             if synced { self = SyncEstimator() }
             return nil
         }
+        if let lastAdvance, now.timeIntervalSince(lastAdvance) >= 90 {
+            lastHeight = walletHeight
+            self.lastAdvance = now
+            blocksPerSecond = nil
+            return nil
+        }
         if let lastHeight, let lastAdvance, walletHeight > lastHeight {
             let elapsed = now.timeIntervalSince(lastAdvance)
             if elapsed >= 2 {

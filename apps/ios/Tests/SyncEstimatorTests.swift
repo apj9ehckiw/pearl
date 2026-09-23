@@ -10,7 +10,9 @@ final class SyncEstimatorTests: XCTestCase {
                                        now: start.addingTimeInterval(10)) ?? -1, 90, accuracy: 0.01)
         XCTAssertNil(estimate.update(walletHeight: 110, peerHeight: 200, synced: false,
                                      now: start.addingTimeInterval(101)))
+        XCTAssertEqual(estimate.update(walletHeight: 120, peerHeight: 200, synced: false,
+                                       now: start.addingTimeInterval(111)) ?? -1, 80, accuracy: 0.01)
         XCTAssertNil(estimate.update(walletHeight: 200, peerHeight: 200, synced: true,
-                                     now: start.addingTimeInterval(102)))
+                                     now: start.addingTimeInterval(112)))
     }
 }

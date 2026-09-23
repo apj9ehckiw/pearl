@@ -36,7 +36,8 @@ actor AddressBookStore {
             in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("Pearl", isDirectory: true)
         let directory = root.appendingPathComponent(network, isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                attributes: nil)
         var excluded = root
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
