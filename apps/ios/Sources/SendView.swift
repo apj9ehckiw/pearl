@@ -72,11 +72,12 @@ struct SendView: View {
                     guard let value = grains, let feeValue = validFee else { return }
                     let secret = password; password = ""
                     let useBiometrics = biometricAuthorization
+                    let recipient = address
                     Task {
                         if useBiometrics {
-                            txid = await wallet.sendWithBiometrics(address: address, amount: value, fee: feeValue)
+                            txid = await wallet.sendWithBiometrics(address: recipient, amount: value, fee: feeValue)
                         } else {
-                            txid = await wallet.send(address: address, amount: value, fee: feeValue, password: secret)
+                            txid = await wallet.send(address: recipient, amount: value, fee: feeValue, password: secret)
                         }
                     }
                 }

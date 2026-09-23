@@ -180,6 +180,12 @@ final class WalletModel: ObservableObject {
             let password = try await BiometricStore.shared.read(network: selectedNetwork,
                 reason: "验证并发送 \(PearlAmount.display(amount)) PRL")
             guard request == generation, unlocked, selectedNetwork == network else { return nil }
+            if AutoLockPolicy.shouldLock(since: lastActivity, now: Date(),
+                configuredMinutes: UserDefaults.standard.integer(forKey: "autoLockMinutes")) {
+                self.error = "闲置时间已到，钱包已锁定。请重新解锁后重试转账。"
+                await lock()
+                return nil
+            }
             let txid = try await engine.send(address: address, grains: amount, fee: fee, password: password)
             noteActivity()
             return txid

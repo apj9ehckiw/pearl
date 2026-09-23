@@ -16,7 +16,7 @@ struct PearlWalletApp: App {
                 RootView().environmentObject(wallet)
                 if scenePhase != .active || checkingForeground {
                     Color(.systemBackground).ignoresSafeArea()
-                    Label("Pearl 钱包已锁定", systemImage: "lock.shield.fill")
+                    Label("Pearl 内容已隐藏", systemImage: "eye.slash.fill")
                         .font(.title2).foregroundStyle(.teal)
                 }
             }
