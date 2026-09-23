@@ -10,13 +10,17 @@ final class WalletModel: ObservableObject {
     @Published var snapshot: WalletSnapshot?
     @Published var receiveAddress = ""
     @Published var network = UserDefaults.standard.string(forKey: "network") ?? "mainnet"
+    @Published var biometricName: String?
+    @Published var biometricEnabled = false
     private var generation = 0
     private let engine = WalletEngine.shared
 
     func initialize() async {
         initialized = false
+        biometricName = BiometricStore.availableName()
+        biometricEnabled = UserDefaults.standard.bool(forKey: biometricKey)
         do { exists = try await engine.initialize(network: network); initialized = true }
-        catch { self.error = error.localizedDescription }
+        catch { self.error = message(error) }
     }
 
     func changeNetwork(_ value: String) async {
@@ -39,16 +43,66 @@ final class WalletModel: ObservableObject {
                 try await engine.create(phrase: phrase, password: password, restoring: restoring)
                 exists = true
             } else { try await engine.open(password: password) }
-            guard request == generation else { try await engine.close(); return }
-            unlocked = true
-            try await engine.sync()
-            guard request == generation else { return }
-            let address = try await engine.address()
-            guard request == generation else { return }
-            receiveAddress = address
-            let result = try await engine.status()
-            if request == generation { snapshot = result }
-        } catch { self.error = error.localizedDescription }
+            try await finishOpening(request: request)
+        } catch { self.error = message(error) }
+    }
+
+    func unlockWithBiometrics() async {
+        guard exists, biometricEnabled, biometricName != nil, !busy else { return }
+        busy = true
+        defer { busy = false }
+        let request = generation
+        let selectedNetwork = network
+        do {
+            let password = try await BiometricStore.shared.read(network: selectedNetwork)
+            guard request == generation, selectedNetwork == network else { return }
+            try await engine.open(password: password)
+            try await finishOpening(request: request)
+        } catch BiometricStoreError.cancelled {
+            // A cancelled system prompt leaves the manual password path available.
+        } catch {
+            self.error = message(error)
+        }
+    }
+
+    func enableBiometrics(password: String) async -> Bool {
+        guard unlocked, !busy, biometricName != nil else { return false }
+        busy = true
+        defer { busy = false }
+        let selectedNetwork = network
+        do {
+            try await engine.checkPassword(password)
+            try await BiometricStore.shared.save(password, network: selectedNetwork)
+            UserDefaults.standard.set(true, forKey: biometricKey)
+            biometricEnabled = true
+            return true
+        } catch {
+            self.error = message(error)
+            return false
+        }
+    }
+
+    func disableBiometrics() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        await BiometricStore.shared.remove(network: network)
+        UserDefaults.standard.set(false, forKey: biometricKey)
+        biometricEnabled = false
+    }
+
+    private var biometricKey: String { "biometric-unlock.\(network)" }
+
+    private func finishOpening(request: Int) async throws {
+        guard request == generation else { try await engine.close(); return }
+        unlocked = true
+        try await engine.sync()
+        guard request == generation else { return }
+        let address = try await engine.address()
+        guard request == generation else { return }
+        receiveAddress = address
+        let result = try await engine.status()
+        if request == generation { snapshot = result }
     }
 
     func refresh() async {
@@ -57,7 +111,7 @@ final class WalletModel: ObservableObject {
         do {
             let result = try await engine.status()
             if request == generation { snapshot = result }
-        } catch { if request == generation { self.error = error.localizedDescription } }
+        } catch { if request == generation { self.error = message(error) } }
     }
 
     func retrySync() async {
@@ -69,7 +123,7 @@ final class WalletModel: ObservableObject {
             try await engine.sync()
             let address = try await engine.address()
             if request == generation { receiveAddress = address }
-        } catch { self.error = error.localizedDescription }
+        } catch { self.error = message(error) }
     }
 
     func lock() async {
@@ -78,7 +132,7 @@ final class WalletModel: ObservableObject {
         snapshot = nil
         receiveAddress = ""
         do { try await engine.close() }
-        catch { self.error = error.localizedDescription }
+        catch { self.error = message(error) }
     }
 
     func send(address: String, amount: Int64, fee: Int64, password: String) async -> String? {
@@ -86,6 +140,20 @@ final class WalletModel: ObservableObject {
         busy = true
         defer { busy = false }
         do { return try await engine.send(address: address, grains: amount, fee: fee, password: password) }
-        catch { self.error = "\(error.localizedDescription)\nCheck Activity before retrying; a broadcast may already have reached peers."; return nil }
+        catch { self.error = "\(message(error))\n重试前请先查看交易记录；交易可能已经广播。"; return nil }
+    }
+
+    private func message(_ error: Error) -> String {
+        if let error = error as? BiometricStoreError { return error.localizedDescription }
+        let detail = error.localizedDescription
+        let lower = detail.lowercased()
+        if lower.contains("invalid passphrase") || lower.contains("wrong passphrase") || lower.contains("invalid password") {
+            return "钱包密码错误。"
+        }
+        if lower.contains("invalid bip39") { return "恢复短语无效，请检查 24 个英文单词及顺序。" }
+        if lower.contains("insufficient") { return "余额不足，或余额不足以支付手续费。" }
+        if lower.contains("invalid address") { return "地址无效，或与当前网络不匹配。" }
+        if lower.contains("wallet synchronization") { return "请等待钱包同步完成。" }
+        return "操作失败：\(detail)"
     }
 }

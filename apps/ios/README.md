@@ -13,12 +13,19 @@ fork, not an official Pearl Research Labs release.
 - BIP86 Pearl receiving address, QR code and share sheet.
 - Confirmed/pending balances, latest 50 activity entries, local signing and broadcast.
 - Mainnet and testnet2 with separate databases.
-- Password required to open and sign, privacy cover when inactive, lock on background.
+- Simplified Chinese interface with system, light and dark appearance options.
+- Optional Face ID / Touch ID unlock after a password check; signing still requires
+  the wallet password. The unlock credential is held in a device-only Keychain
+  item that requires a device passcode and the current biometric enrollment.
+- Privacy cover when inactive, lock on background.
 - App data excluded from cloud backup. Keep the recovery phrase offline.
 
 The app must stay in the foreground to sync. Restoring scans from genesis, which
 can take time and storage. Backgrounding closes the database and peer connections;
 unlocking resumes from saved state. No RPC port is opened on the phone.
+If biometrics change or are unavailable, unlock with the wallet password and
+enable biometric unlock again. Biometric credentials are separate per network
+and do not migrate to another device.
 
 ## GitHub Actions build
 
@@ -70,11 +77,12 @@ are not committed. Build from a clean checkout when rebuilding the XCFramework.
 ## Validation
 
 `go test ./mobile/core` checks BIP39 generation, network/amount validation and
-lifecycle guards, encrypted database reopen, offline SPV shutdown and receiving
+lifecycle guards, password verification and key relocking, encrypted database reopen, offline SPV shutdown and receiving
 address persistence without native libraries. The iOS workflow builds with both
 `xmss,zkpow` production tags and executes XCTest amount parsing tests on a simulator.
 Building successfully does not constitute a real-funds or mainnet recovery test;
-verify restore, synchronization and send/receive on testnet before holding funds.
+verify Face ID / Touch ID on an enrolled physical device, restore,
+synchronization and send/receive on testnet before holding funds.
 
 ## Layout
 

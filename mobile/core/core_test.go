@@ -31,6 +31,9 @@ func TestEncryptedWalletRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = Close() })
+	if err := CheckPassword(password); err != nil || !active.Locked() {
+		t.Fatalf("new wallet password check did not relock: %v", err)
+	}
 	if _, err := Initialize(root, "mainnet"); err == nil {
 		t.Fatal("switched an open wallet")
 	}
@@ -53,6 +56,15 @@ func TestEncryptedWalletRoundTrip(t *testing.T) {
 	}
 	if err := Open(password); err != nil {
 		t.Fatal(err)
+	}
+	if err := CheckPassword("wrong-password"); err == nil {
+		t.Fatal("accepted wrong biometric setup password")
+	}
+	if err := CheckPassword(password); err != nil {
+		t.Fatal(err)
+	}
+	if !active.Locked() {
+		t.Fatal("password check left private keys unlocked")
 	}
 	status, err := Status()
 	if err != nil {

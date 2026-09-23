@@ -21,44 +21,44 @@ struct SendView: View {
             Form {
                 if let txid {
                     Section {
-                        Label("Transaction broadcast", systemImage: "checkmark.circle.fill").foregroundStyle(.teal)
+                        Label("交易已广播", systemImage: "checkmark.circle.fill").foregroundStyle(.teal)
                         Text(txid).font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
-                        Text("Wait for network confirmations in Activity.").foregroundStyle(.secondary)
+                        Text("请在交易记录中查看网络确认进度。").foregroundStyle(.secondary)
                     }
                 } else {
-                    Section("Recipient") {
-                        TextField("Pearl address", text: $address).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Section("收款方") {
+                        TextField("Pearl 地址", text: $address).textInputAutocapitalization(.never).autocorrectionDisabled()
                     }
-                    Section("Amount") {
+                    Section("金额") {
                         TextField("PRL", text: $amount).keyboardType(.decimalPad)
-                        if let balance = wallet.snapshot?.balance { Text("Confirmed: \(PearlAmount.display(balance)) PRL").font(.caption) }
+                        if let balance = wallet.snapshot?.balance { Text("已确认余额：\(PearlAmount.display(balance)) PRL").font(.caption) }
                     }
                     Section {
-                        TextField("Grains per kB", text: $fee).keyboardType(.numberPad)
-                    } header: { Text("Network fee rate · grains / kB") }
-                    footer: { Text("1 PRL = 100,000,000 grains. The total fee depends on transaction size and is added to the amount. Minimum rate: 1,000 grains/kB.") }
-                    Section("Authorize signing") {
-                        SecureField("Wallet password", text: $password).textContentType(.password)
-                        Text("Review the address, amount and fee rate before confirming.").font(.footnote)
+                        TextField("每 kB 的最小单位数", text: $fee).keyboardType(.numberPad)
+                    } header: { Text("网络费率 · grains / kB") }
+                    footer: { Text("1 PRL = 100,000,000 grains。实际手续费随交易大小变化，会在发送金额之外扣除。最低费率为 1,000 grains/kB。") }
+                    Section("授权签名") {
+                        SecureField("钱包密码", text: $password).textContentType(.password)
+                        Text("确认前请核对地址、金额和费率。").font(.footnote)
                     }
-                    Button("Review transfer") { confirming = true }
+                    Button("核对转账") { confirming = true }
                         .disabled(grains == nil || validFee == nil || password.isEmpty || address.isEmpty || wallet.busy || wallet.snapshot?.synced != true)
                 }
-                if wallet.busy { ProgressView("Signing and broadcasting…") }
+                if wallet.busy { ProgressView("正在签名并广播…") }
             }
             .disabled(wallet.busy)
-            .navigationTitle("Send Pearl")
-            .toolbar { Button("Done") { password = ""; dismiss() }.disabled(wallet.busy) }
+            .navigationTitle("发送 Pearl")
+            .toolbar { Button("完成") { password = ""; dismiss() }.disabled(wallet.busy) }
             .interactiveDismissDisabled(wallet.busy)
-            .confirmationDialog("Confirm transfer", isPresented: $confirming, titleVisibility: .visible) {
-                Button("Send \(amount) PRL") {
+            .confirmationDialog("确认转账", isPresented: $confirming, titleVisibility: .visible) {
+                Button("发送 \(amount) PRL") {
                     guard let value = grains, let feeValue = validFee else { return }
                     let secret = password; password = ""
                     Task { txid = await wallet.send(address: address, amount: value, fee: feeValue, password: secret) }
                 }
-                Button("Cancel", role: .cancel) { }
+                Button("取消", role: .cancel) { }
             } message: {
-                Text("Network: \(wallet.network)\nTo: \(address)\nAmount: \(amount) PRL\nFee rate: \(fee) grains/kB\nTransfers cannot be reversed.")
+                Text("网络：\(wallet.network == "mainnet" ? "主网" : "测试网")\n收款地址：\(address)\n金额：\(amount) PRL\n费率：\(fee) grains/kB\n转账一经发送无法撤销。")
             }
             .onChange(of: phase) { value in if value == .background { password = ""; confirming = false } }
         }

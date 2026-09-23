@@ -126,6 +126,21 @@ func Open(password string) error {
 	return nil
 }
 
+// CheckPassword verifies the current wallet passphrase without leaving signing
+// keys unlocked. The iOS app uses this before enabling biometric unlock.
+func CheckPassword(password string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	if active == nil {
+		return errors.New("wallet is closed")
+	}
+	if err := active.Unlock([]byte(password), nil); err != nil {
+		return err
+	}
+	active.Lock()
+	return nil
+}
+
 // StartSync connects directly to Pearl peers using the upstream SPV verifier.
 func StartSync() error {
 	mu.Lock()

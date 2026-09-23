@@ -7,10 +7,10 @@ struct RootView: View {
         Group {
             if wallet.unlocked {
                 TabView {
-                    DashboardView().tabItem { Label("Wallet", systemImage: "circle.hexagongrid.fill") }
-                    ReceiveView().tabItem { Label("Receive", systemImage: "qrcode") }
-                    ActivityView().tabItem { Label("Activity", systemImage: "clock") }
-                    SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }
+                    DashboardView().tabItem { Label("钱包", systemImage: "circle.hexagongrid.fill") }
+                    ReceiveView().tabItem { Label("收款", systemImage: "qrcode") }
+                    ActivityView().tabItem { Label("记录", systemImage: "clock") }
+                    SettingsView().tabItem { Label("设置", systemImage: "gearshape") }
                 }
                 .task {
                     while !Task.isCancelled {
@@ -31,36 +31,36 @@ struct DashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     HStack {
-                        Label(wallet.network == "mainnet" ? "PEARL MAINNET" : "PEARL TESTNET", systemImage: "circle.fill")
+                        Label(wallet.network == "mainnet" ? "PEARL 主网" : "PEARL 测试网", systemImage: "circle.fill")
                             .font(.caption.weight(.semibold)).foregroundStyle(.teal)
                         Spacer()
                         Image(systemName: "shield.lefthalf.filled").foregroundStyle(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Your balance").foregroundStyle(.secondary)
+                        Text("可用余额").foregroundStyle(.secondary)
                         Text(wallet.snapshot.map { PearlAmount.display($0.balance) } ?? "—")
                             .font(.system(size: 46, weight: .semibold, design: .rounded)).minimumScaleFactor(0.4).lineLimit(1)
                         Text("PRL").font(.title3).foregroundStyle(.secondary)
                         if let pending = wallet.snapshot?.pending, pending != 0 {
-                            Text("Pending: \(PearlAmount.display(pending)) PRL").font(.footnote)
+                            Text("待确认：\(PearlAmount.display(pending)) PRL").font(.footnote)
                         }
                     }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                         .background(.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 26))
                     Button { showSend = true } label: {
-                        Label("Send Pearl", systemImage: "arrow.up.right").frame(maxWidth: .infinity).padding(10)
+                        Label("发送 Pearl", systemImage: "arrow.up.right").frame(maxWidth: .infinity).padding(10)
                     }.buttonStyle(.borderedProminent).disabled(wallet.snapshot?.synced != true || wallet.busy)
                     VStack(alignment: .leading, spacing: 8) {
-                        Label(wallet.snapshot?.synced == true ? "Wallet is synchronized" : "Synchronizing with Pearl peers",
+                        Label(wallet.snapshot?.synced == true ? "钱包已同步" : "正在与 Pearl 节点同步",
                               systemImage: wallet.snapshot?.synced == true ? "checkmark.shield" : "arrow.triangle.2.circlepath")
                         if let snapshot = wallet.snapshot {
-                            Text("Headers \(snapshot.height) / \(snapshot.peerHeight)").font(.caption).foregroundStyle(.secondary)
+                            Text("区块头 \(snapshot.height) / \(snapshot.peerHeight)").font(.caption).foregroundStyle(.secondary)
                         }
-                        Text("Keep the app open for sync. Recovery scans from the beginning of the chain.")
+                        Text("请保持应用打开以完成同步。导入钱包需要从区块链起点扫描。")
                             .font(.footnote).foregroundStyle(.secondary)
-                        Button("Reconnect") { Task { await wallet.retrySync() } }.disabled(wallet.busy)
+                        Button("重新连接") { Task { await wallet.retrySync() } }.disabled(wallet.busy)
                     }
-                    Text("Your keys. Your Pearl.").font(.title2.weight(.medium))
-                    Text("Transactions are signed on this iPhone. Your recovery phrase never leaves the wallet.")
+                    Text("你的私钥，你的 Pearl。").font(.title2.weight(.medium))
+                    Text("交易在这台 iPhone 上签名，恢复短语不会离开钱包。")
                         .foregroundStyle(.secondary)
                 }.padding(24)
             }.navigationTitle("Pearl")
@@ -77,20 +77,20 @@ struct ReceiveView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    Text("Receive Pearl").font(.largeTitle.bold())
-                    Text("Only send \(wallet.network == "mainnet" ? "mainnet" : "testnet") PRL to this address.").foregroundStyle(.secondary)
+                    Text("接收 Pearl").font(.largeTitle.bold())
+                    Text("此地址仅接收\(wallet.network == "mainnet" ? "主网" : "测试网") PRL。").foregroundStyle(.secondary)
                     if !wallet.receiveAddress.isEmpty {
                         if let image = qr(wallet.receiveAddress) {
                             Image(uiImage: image).interpolation(.none).resizable().scaledToFit()
                                 .frame(width: 240, height: 240).padding(20).background(.white, in: RoundedRectangle(cornerRadius: 20))
                         }
                         Text(wallet.receiveAddress).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                        ShareLink(item: wallet.receiveAddress) { Label("Share address", systemImage: "square.and.arrow.up") }
+                        ShareLink(item: wallet.receiveAddress) { Label("分享地址", systemImage: "square.and.arrow.up") }
                             .buttonStyle(.borderedProminent)
-                        Button("Copy address") { UIPasteboard.general.string = wallet.receiveAddress }
-                    } else { ProgressView("Preparing address…") }
+                        Button("复制地址") { UIPasteboard.general.string = wallet.receiveAddress }
+                    } else { ProgressView("正在准备地址…") }
                 }.padding(24)
-            }.navigationTitle("Receive").navigationBarTitleDisplayMode(.inline)
+            }.navigationTitle("收款").navigationBarTitleDisplayMode(.inline)
         }
     }
 
@@ -111,49 +111,78 @@ struct ActivityView: View {
                 let transactions = wallet.snapshot?.transactions ?? []
                 if transactions.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("No transactions yet").font(.headline)
-                        Text("Incoming and outgoing transfers appear here as your wallet syncs.").foregroundStyle(.secondary)
+                        Text("暂无交易").font(.headline)
+                        Text("钱包同步后，收款和付款记录会显示在这里。").foregroundStyle(.secondary)
                     }.padding(.vertical, 20)
                 }
                 ForEach(Array(transactions.enumerated()), id: \.offset) { _, tx in
                     VStack(alignment: .leading, spacing: 7) {
                         HStack {
-                            Label(tx.category.capitalized, systemImage: tx.amount < 0 ? "arrow.up.right" : "arrow.down.left")
+                            Label(tx.amount < 0 ? "发送" : "接收", systemImage: tx.amount < 0 ? "arrow.up.right" : "arrow.down.left")
                             Spacer()
                             Text("\(NSDecimalNumber(decimal: tx.amount).stringValue) PRL").fontWeight(.medium)
                         }
-                        Text(tx.confirmations > 0 ? "\(tx.confirmations) confirmations" : "Pending").font(.caption).foregroundStyle(.secondary)
+                        Text(tx.confirmations > 0 ? "\(tx.confirmations) 次确认" : "待确认").font(.caption).foregroundStyle(.secondary)
                         Text(tx.txid).font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
                     }.padding(.vertical, 6)
                 }
-                if transactions.count >= 50 { Text("Showing the latest 50 entries").font(.footnote).foregroundStyle(.secondary) }
-            }.navigationTitle("Activity").refreshable { await wallet.refresh() }
+                if transactions.count >= 50 { Text("仅显示最近 50 笔交易").font(.footnote).foregroundStyle(.secondary) }
+            }.navigationTitle("交易记录").refreshable { await wallet.refresh() }
         }
     }
 }
 
 struct SettingsView: View {
     @EnvironmentObject private var wallet: WalletModel
+    @AppStorage("appearance") private var appearance = "system"
+    @State private var setupPassword = ""
     var body: some View {
         NavigationStack {
             Form {
-                Section("Network") {
-                    Text(wallet.network == "mainnet" ? "Pearl Mainnet" : "Pearl Testnet 2")
-                    Text("Lock the wallet to switch networks.").font(.footnote).foregroundStyle(.secondary)
+                Section("网络") {
+                    Text(wallet.network == "mainnet" ? "Pearl 主网" : "Pearl 测试网 2")
+                    Text("锁定钱包后可切换网络。").font(.footnote).foregroundStyle(.secondary)
                 }
-                Section("Security") {
-                    Label("Encrypted wallet stored on this device", systemImage: "iphone.gen3")
-                    Label("Locks when the app enters background", systemImage: "lock.shield")
-                    Text("Keep your recovery phrase offline. App data is excluded from iCloud backup; deleting the app removes its wallet.")
+                Section("外观") {
+                    Picker("显示模式", selection: $appearance) {
+                        Text("跟随系统").tag("system")
+                        Text("浅色").tag("light")
+                        Text("深色").tag("dark")
+                    }
+                }
+                Section("安全") {
+                    Label("钱包已加密并保存在本机", systemImage: "iphone.gen3")
+                    Label("应用进入后台时自动锁定", systemImage: "lock.shield")
+                    if let name = wallet.biometricName {
+                        if wallet.biometricEnabled {
+                            Label("已启用\(name)解锁", systemImage: "faceid")
+                            Button("关闭生物识别解锁") { Task { await wallet.disableBiometrics() } }
+                                .disabled(wallet.busy)
+                        } else {
+                            SecureField("输入钱包密码以启用\(name)", text: $setupPassword)
+                                .textContentType(.password)
+                            Button("启用\(name)解锁") {
+                                let secret = setupPassword
+                                setupPassword = ""
+                                Task { _ = await wallet.enableBiometrics(password: secret) }
+                            }.disabled(setupPassword.isEmpty || wallet.busy)
+                        }
+                        Text("生物识别只用于解锁；发送交易仍需钱包密码。更改设备生物识别设置后，需要重新启用。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        Text("设置设备密码并录入面容 ID 或触控 ID 后，即可启用生物识别解锁。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Text("请离线保存恢复短语。应用数据不会备份到 iCloud；删除应用会移除本机钱包。")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Button("Lock wallet") { Task { await wallet.lock() } }
+                    Button("锁定钱包") { Task { await wallet.lock() } }
                 }
-                Section("About") {
-                    Text("Pearl Wallet for iOS · 0.1.0")
-                    Text("Community fork · Built on Oyster and Pearl SPV")
-                    Link("Source code", destination: URL(string: "https://github.com/apj9ehckiw/pearl/tree/codex/ios-wallet/apps/ios")!)
+                Section("关于") {
+                    Text("Pearl Wallet iOS · 0.2.0")
+                    Text("社区分支 · 基于 Oyster 与 Pearl SPV")
+                    Link("查看源代码", destination: URL(string: "https://github.com/apj9ehckiw/pearl/tree/codex/ios-wallet/apps/ios")!)
                 }
-            }.navigationTitle("Settings")
+            }.navigationTitle("设置")
         }
     }
 }

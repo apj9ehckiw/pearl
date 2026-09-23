@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @State private var verification = ""
     @State private var mode = "welcome"
     @State private var backedUp = false
+    @State private var saveBiometric = false
 
     private var verified: Bool {
         let words = phrase.split(separator: " ")
@@ -21,61 +22,77 @@ struct OnboardingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     Image(systemName: "circle.hexagongrid.fill").font(.system(size: 64)).foregroundStyle(.teal).padding(.top, 30)
-                    Text(wallet.exists ? "Welcome back." : "A home for\nyour Pearl.")
+                    Text(wallet.exists ? "欢迎回来" : "你的 Pearl，\n由你掌握")
                         .font(.system(size: 40, weight: .semibold, design: .rounded))
-                    Text(wallet.exists ? "Unlock the wallet on this device." : "An independent wallet. Private keys stay with you.")
+                    Text(wallet.exists ? "解锁这台设备上的钱包。" : "独立钱包，私钥只保存在本机。")
                         .foregroundStyle(.secondary)
-                    Picker("Network", selection: Binding(get: { wallet.network }, set: { value in
+                    Picker("网络", selection: Binding(get: { wallet.network }, set: { value in
                         reset(); Task { await wallet.changeNetwork(value) }
                     })) {
-                        Text("Mainnet").tag("mainnet")
-                        Text("Testnet 2").tag("testnet2")
+                        Text("主网").tag("mainnet")
+                        Text("测试网 2").tag("testnet2")
                     }.pickerStyle(.segmented).disabled(wallet.busy)
 
                     if wallet.exists {
-                        SecureField("Wallet password", text: $password).textContentType(.password).textFieldStyle(.roundedBorder)
-                        action("Unlock wallet") {
+                        if wallet.biometricEnabled, let name = wallet.biometricName {
+                            action("使用\(name)解锁") { await wallet.unlockWithBiometrics() }
+                        }
+                        SecureField("钱包密码", text: $password).textContentType(.password).textFieldStyle(.roundedBorder)
+                        if wallet.biometricName != nil && !wallet.biometricEnabled {
+                            Toggle("下次使用生物识别解锁", isOn: $saveBiometric)
+                        }
+                        action("解锁钱包") {
                             let secret = password; password = ""
                             await wallet.open(password: secret)
+                            if wallet.unlocked && saveBiometric {
+                                _ = await wallet.enableBiometrics(password: secret)
+                            }
+                            saveBiometric = false
                         }.disabled(password.isEmpty || wallet.busy)
                     } else if mode == "welcome" {
-                        action("Create a wallet") {
+                        action("创建钱包") {
                             do { phrase = try await WalletEngine.shared.mnemonic(); mode = "create" }
                             catch { wallet.error = error.localizedDescription }
                         }
-                        Button("Restore with recovery phrase") { mode = "restore" }.frame(maxWidth: .infinity)
+                        Button("使用恢复短语导入") { mode = "restore" }.frame(maxWidth: .infinity)
                     } else {
                         if mode == "create" {
-                            Text("Write down your 24 words").font(.title2.bold())
-                            Text("Keep these offline and in order. Anyone with these words can spend your Pearl. They will only be shown during setup.")
+                            Text("抄写这 24 个单词").font(.title2.bold())
+                            Text("按顺序离线保存。任何获得这些单词的人都能使用你的 Pearl；创建完成后不再显示。")
                                 .font(.footnote).foregroundStyle(.secondary)
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
                                 ForEach(Array(phrase.split(separator: " ").enumerated()), id: \.offset) { index, word in
                                     Text("\(index + 1). \(word)").font(.system(.callout, design: .monospaced))
                                 }
                             }.padding().background(.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 16)).privacySensitive()
-                            Toggle("I saved my recovery phrase offline", isOn: $backedUp)
-                            TextField("Enter words 3, 12 and 24, separated by spaces", text: $verification)
+                            Toggle("我已离线备份恢复短语", isOn: $backedUp)
+                            TextField("按顺序输入第 3、12、24 个单词，以空格分隔", text: $verification)
                                 .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
                         } else {
-                            Text("Recovery phrase").font(.headline)
+                            Text("恢复短语").font(.headline)
                             TextEditor(text: $phrase).frame(minHeight: 130).padding(8)
                                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                                 .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive()
-                            Text("Supports Oyster BIP39 phrases without an additional BIP39 passphrase. Recovery scans from genesis.")
+                            Text("支持未设置额外 BIP39 密语的 Oyster 助记词。恢复时会从创世区块开始扫描。")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
-                        SecureField("New password (10+ characters)", text: $password).textContentType(.newPassword).textFieldStyle(.roundedBorder)
-                        SecureField("Confirm password", text: $confirmation).textContentType(.newPassword).textFieldStyle(.roundedBorder)
-                        action(mode == "create" ? "Create wallet" : "Restore wallet") {
+                        SecureField("设置钱包密码（至少 10 个字符）", text: $password).textContentType(.newPassword).textFieldStyle(.roundedBorder)
+                        SecureField("确认钱包密码", text: $confirmation).textContentType(.newPassword).textFieldStyle(.roundedBorder)
+                        if wallet.biometricName != nil {
+                            Toggle("以后使用生物识别解锁", isOn: $saveBiometric)
+                        }
+                        action(mode == "create" ? "创建钱包" : "导入钱包") {
                             let seed = phrase, secret = password, restoring = mode == "restore"
                             await wallet.open(password: secret, phrase: seed, restoring: restoring)
+                            if wallet.unlocked && saveBiometric {
+                                _ = await wallet.enableBiometrics(password: secret)
+                            }
                             if wallet.exists { reset() }
                         }.disabled(wallet.busy || password.count < 10 || password != confirmation || phrase.isEmpty || (mode == "create" && (!backedUp || !verified)))
-                        Button("Back") { reset() }.disabled(wallet.busy)
+                        Button("返回") { reset() }.disabled(wallet.busy)
                     }
-                    if wallet.busy { ProgressView("Opening wallet…") }
-                    Text("Community edition · Powered by Pearl / Oyster").font(.caption).foregroundStyle(.secondary).padding(.top, 16)
+                    if wallet.busy { ProgressView("正在打开钱包…") }
+                    Text("社区版本 · 基于 Pearl / Oyster").font(.caption).foregroundStyle(.secondary).padding(.top, 16)
                 }.padding(26).disabled(!wallet.initialized)
             }.onChange(of: phase) { value in if value == .background { reset() } }
         }
@@ -87,6 +104,6 @@ struct OnboardingView: View {
     }
 
     private func reset() {
-        password = ""; confirmation = ""; phrase = ""; verification = ""; backedUp = false; mode = "welcome"
+        password = ""; confirmation = ""; phrase = ""; verification = ""; backedUp = false; saveBiometric = false; mode = "welcome"
     }
 }

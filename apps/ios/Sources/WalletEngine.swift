@@ -38,6 +38,11 @@ actor WalletEngine {
         guard CoreOpen(password, &error) else { throw failure(error) }
     }
 
+    func checkPassword(_ password: String) throws {
+        var error: NSError?
+        guard CoreCheckPassword(password, &error) else { throw failure(error) }
+    }
+
     func sync() throws {
         var error: NSError?
         guard CoreStartSync(&error) else { throw failure(error) }
@@ -70,7 +75,7 @@ actor WalletEngine {
     }
 
     private func failure(_ error: NSError?) -> Error {
-        error ?? NSError(domain: "Pearl", code: 1, userInfo: [NSLocalizedDescriptionKey: "Wallet operation failed"])
+        error ?? NSError(domain: "Pearl", code: 1, userInfo: [NSLocalizedDescriptionKey: "钱包操作失败"])
     }
 }
 
