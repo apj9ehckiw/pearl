@@ -40,9 +40,11 @@ struct PearlWalletApp: App {
                         }
                     }
                 } else if phase == .active {
+                    let returnedAt = Date()
                     Task {
                         if !wallet.initialized { await wallet.initialize() }
-                        await wallet.lockAfterBackground(immediately: lockImmediatelyOnBackground)
+                        await wallet.lockAfterBackground(immediately: lockImmediatelyOnBackground,
+                            now: returnedAt)
                         checkingForeground = false
                     }
                 }

@@ -108,7 +108,6 @@ final class WalletModel: ObservableObject {
     private func finishOpening(request: Int) async throws {
         guard request == generation else { try await engine.close(); return }
         unlocked = true
-        backgroundEnteredAt = nil
         try await engine.sync()
         guard request == generation else { return }
         let address = try await engine.address()
@@ -158,7 +157,6 @@ final class WalletModel: ObservableObject {
     func lockAfterBackground(immediately: Bool, now: Date = Date()) async {
         guard let enteredAt = backgroundEnteredAt else { return }
         backgroundEnteredAt = nil
-        guard unlocked else { return }
         let configured = UserDefaults.standard.integer(forKey: "autoLockMinutes")
         if immediately || AutoLockPolicy.shouldLock(backgroundEnteredAt: enteredAt,
             now: now, configuredMinutes: configured) {
