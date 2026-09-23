@@ -30,6 +30,14 @@ for platform in device simulator; do
   mkdir -p "build/ios/$platform"
   gomobile bind -target="$GO_TARGET" -iosversion=16.0 -tags=xmss,zkpow \
     -o "build/ios/$platform/PearlCore.xcframework" ./mobile/core
+  # Go's c-archive carries references to external CGO libraries, not their
+  # object code. Merge both native archives into each framework slice so
+  # Xcode can resolve XMSS and verifier symbols when linking the final app.
+  FRAMEWORK="$(find "$ROOT/build/ios/$platform" -type d -name PearlCore.framework | head -1)"
+  xcrun libtool -static -o "$ROOT/build/ios/$platform/combined.a" \
+    "$FRAMEWORK/PearlCore" "$ROOT/xmss/libxmss.a" \
+    "$ROOT/zk-pow/bindings/go/target/$TARGET/release/libzk_pow_ffi.a"
+  mv "$ROOT/build/ios/$platform/combined.a" "$FRAMEWORK/PearlCore"
 done
 unset SDKROOT
 DEVICE="$(find "$ROOT/build/ios/device" -type d -name PearlCore.framework | head -1)"

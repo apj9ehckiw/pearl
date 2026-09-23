@@ -262,17 +262,25 @@ func Close() error {
 	if active == nil {
 		return nil
 	}
-	active.Lock()
 	if cancel != nil {
 		cancel()
 		cancel = nil
 	}
-	err := loader.UnloadWallet()
+	// Stop queries before waiting for wallet recovery to exit: the upstream
+	// service currently ignores the context passed to Start.
+	if client != nil {
+		client.Stop()
+	}
+	var err error
+	if service != nil {
+		err = service.Stop()
+	}
+	active.Lock()
+	err = errors.Join(err, loader.UnloadWallet())
 	if client != nil {
 		client.WaitForShutdown()
 	}
 	if service != nil {
-		err = errors.Join(err, service.Stop())
 		err = errors.Join(err, closeHeaders(service))
 		service = nil
 	}

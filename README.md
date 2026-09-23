@@ -1,4 +1,13 @@
-# Pearl
+# Pearl — iOS Wallet Fork
+
+[![Pearl iOS Wallet](https://github.com/apj9ehckiw/pearl/actions/workflows/pearl-ios-wallet.yml/badge.svg?branch=codex%2Fios-wallet)](https://github.com/apj9ehckiw/pearl/actions/workflows/pearl-ios-wallet.yml)
+
+本 fork 提供独立运行的 iOS Pearl Wallet：手机内创建/恢复钱包、保存加密私钥、SPV 同步与本地签名。
+查看 [iOS 构建和安装说明](apps/ios/README.md)，在 [本仓库的 iOS Actions](https://github.com/apj9ehckiw/pearl/actions/workflows/pearl-ios-wallet.yml) 下载构建产物。
+开发分支为 `codex/ios-wallet`；不向原作者仓库提交 PR。
+
+<details>
+<summary>原作者项目 CI 状态（不是本 fork 的 iOS 构建）</summary>
 
 [![Blockchain / Build and Test](https://github.com/pearl-research-labs/pearl/actions/workflows/blockchain_ci.yml/badge.svg)](https://github.com/pearl-research-labs/pearl/actions/workflows/blockchain_ci.yml)
 [![Integration Tests CI](https://github.com/pearl-research-labs/pearl/actions/workflows/integration_tests_ci.yml/badge.svg)](https://github.com/pearl-research-labs/pearl/actions/workflows/integration_tests_ci.yml)
@@ -8,6 +17,8 @@
 [![Plonky2 Tests](https://github.com/pearl-research-labs/pearl/actions/workflows/plonky2_ci.yml/badge.svg)](https://github.com/pearl-research-labs/pearl/actions/workflows/plonky2_ci.yml)
 [![Rust CI](https://github.com/pearl-research-labs/pearl/actions/workflows/rust_ci.yml/badge.svg)](https://github.com/pearl-research-labs/pearl/actions/workflows/rust_ci.yml)
 [![ISC License](https://img.shields.io/badge/license-ISC-blue.svg)](http://copyfree.org)
+
+</details>
 
 Pearl is an L1 blockchain based on the **Proof-of-Useful-Work** protocol, where mining is done as a by-product of arbitrary matrix multiplication, as proposed [in this paper](https://arxiv.org/abs/2504.09971).
 
