@@ -1,6 +1,7 @@
 name: PearlWallet
 options:
   bundleIdPrefix: app.pearlwallet
+  developmentLanguage: zh-Hans
   deploymentTarget:
     iOS: '16.0'
 settings:
@@ -26,7 +27,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.pearlwallet.ios
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Pearl 钱包
-        INFOPLIST_KEY_CFBundleDevelopmentRegion: zh-Hans
         INFOPLIST_KEY_NSFaceIDUsageDescription: 使用面容 ID 解锁本机 Pearl 钱包。
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
