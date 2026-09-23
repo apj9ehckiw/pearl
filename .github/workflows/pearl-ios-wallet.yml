@@ -12,7 +12,7 @@ concurrency:
 jobs:
   build:
     if: github.repository == 'apj9ehckiw/pearl'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -43,7 +43,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: apps/ios/Frameworks/PearlCore.xcframework
-          key: ios16-arm64-core-${{ hashFiles('mobile/**', 'go.mod', 'go.sum', 'node/**', 'wallet/**', 'spv/**', 'xmss/**', 'zk-pow/**', 'plonky2/**', 'pearl-blake3/**') }}
+          key: ios26-arm64-core-${{ hashFiles('mobile/**', 'go.mod', 'go.sum', 'node/**', 'wallet/**', 'spv/**', 'xmss/**', 'zk-pow/**', 'plonky2/**', 'pearl-blake3/**') }}
       - name: Build native wallet and cryptographic libraries
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: bash mobile/build-ios.sh

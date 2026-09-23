@@ -58,7 +58,7 @@ actor BiometricStore {
         }
     }
 
-    func read(network: String) throws -> String {
+    func read(network: String, reason: String) throws -> String {
         guard Self.availableName() != nil else { throw BiometricStoreError.unavailable }
         let context = LAContext()
         context.localizedFallbackTitle = ""
@@ -66,7 +66,7 @@ actor BiometricStore {
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         query[kSecUseAuthenticationContext as String] = context
-        query[kSecUseOperationPrompt as String] = "使用生物识别解锁 Pearl 钱包"
+        query[kSecUseOperationPrompt as String] = reason
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecUserCanceled { throw BiometricStoreError.cancelled }

@@ -3,22 +3,31 @@ import CoreImage.CIFilterBuiltins
 
 struct RootView: View {
     @EnvironmentObject private var wallet: WalletModel
+    @State private var selectedTab = 0
     var body: some View {
         Group {
             if wallet.unlocked {
-                TabView {
-                    DashboardView().tabItem { Label("钱包", systemImage: "circle.hexagongrid.fill") }
-                    ReceiveView().tabItem { Label("收款", systemImage: "qrcode") }
-                    ActivityView().tabItem { Label("记录", systemImage: "clock") }
-                    SettingsView().tabItem { Label("设置", systemImage: "gearshape") }
-                }
-                .task {
-                    while !Task.isCancelled {
-                        await wallet.refresh()
-                        do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { break }
-                    }
-                }
+                if #available(iOS 26.0, *) {
+                    walletTabs.tabBarMinimizeBehavior(.onScrollDown)
+                } else { walletTabs }
             } else { OnboardingView() }
+        }
+    }
+
+    private var walletTabs: some View {
+        TabView(selection: $selectedTab) {
+            DashboardView(onReceive: { selectedTab = 1 })
+                .tabItem { Label("钱包", systemImage: "circle.hexagongrid.fill") }.tag(0)
+            ReceiveView().tabItem { Label("收款", systemImage: "qrcode") }.tag(1)
+            ActivityView().tabItem { Label("记录", systemImage: "clock") }.tag(2)
+            SettingsView().tabItem { Label("设置", systemImage: "gearshape") }.tag(3)
+        }
+        .onChange(of: selectedTab) { _ in wallet.noteActivity() }
+        .task {
+            while !Task.isCancelled {
+                await wallet.refresh()
+                do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { break }
+            }
         }
     }
 }
@@ -26,29 +35,44 @@ struct RootView: View {
 struct DashboardView: View {
     @EnvironmentObject private var wallet: WalletModel
     @State private var showSend = false
+    let onReceive: () -> Void
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    HStack {
-                        Label(wallet.network == "mainnet" ? "PEARL 主网" : "PEARL 测试网", systemImage: "circle.fill")
-                            .font(.caption.weight(.semibold)).foregroundStyle(.teal)
-                        Spacer()
-                        Image(systemName: "shield.lefthalf.filled").foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("可用余额").foregroundStyle(.secondary)
-                        Text(wallet.snapshot.map { PearlAmount.display($0.balance) } ?? "—")
-                            .font(.system(size: 46, weight: .semibold, design: .rounded)).minimumScaleFactor(0.4).lineLimit(1)
-                        Text("PRL").font(.title3).foregroundStyle(.secondary)
-                        if let pending = wallet.snapshot?.pending, pending != 0 {
-                            Text("待确认：\(PearlAmount.display(pending)) PRL").font(.footnote)
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        HStack {
+                            Label(wallet.network == "mainnet" ? "PEARL 主网" : "PEARL 测试网", systemImage: "circle.fill")
+                                .font(.caption.weight(.semibold)).foregroundStyle(.teal)
+                            Spacer()
+                            Image(systemName: "shield.lefthalf.filled").foregroundStyle(.teal)
                         }
-                    }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 26))
-                    Button { showSend = true } label: {
-                        Label("发送 Pearl", systemImage: "arrow.up.right").frame(maxWidth: .infinity).padding(10)
-                    }.buttonStyle(.borderedProminent).disabled(wallet.snapshot?.synced != true || wallet.busy)
+                        Text("可用余额").font(.subheadline).foregroundStyle(.secondary)
+                        Text(wallet.snapshot.map { PearlAmount.display($0.balance) } ?? "—")
+                            .font(.system(size: 48, weight: .semibold, design: .rounded))
+                            .contentTransition(.numericText()).minimumScaleFactor(0.45).lineLimit(1)
+                        Text("PRL").font(.headline).foregroundStyle(.secondary)
+                        if let pending = wallet.snapshot?.pending, pending != 0 {
+                            Label("待确认：\(PearlAmount.display(pending)) PRL", systemImage: "clock")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(26).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(LinearGradient(colors: [.teal.opacity(0.18), .cyan.opacity(0.06)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 28))
+                    .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(.teal.opacity(0.15)))
+                    HStack(spacing: 12) {
+                        Button { showSend = true } label: {
+                            Label("发送", systemImage: "arrow.up.right")
+                                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        }.buttonStyle(.borderedProminent)
+                            .disabled(wallet.snapshot?.synced != true || wallet.busy)
+                        Button(action: onReceive) {
+                            Label("收款", systemImage: "arrow.down.left")
+                                .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        }.buttonStyle(.bordered)
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         Label(wallet.snapshot?.synced == true ? "钱包已同步" : "正在与 Pearl 节点同步",
                               systemImage: wallet.snapshot?.synced == true ? "checkmark.shield" : "arrow.triangle.2.circlepath")
@@ -62,7 +86,7 @@ struct DashboardView: View {
                     Text("你的私钥，你的 Pearl。").font(.title2.weight(.medium))
                     Text("交易在这台 iPhone 上签名，恢复短语不会离开钱包。")
                         .foregroundStyle(.secondary)
-                }.padding(24)
+                }.padding(24).frame(maxWidth: 700).frame(maxWidth: .infinity)
             }.navigationTitle("Pearl")
                 .toolbar { Button { Task { await wallet.lock() } } label: { Image(systemName: "lock") } }
                 .refreshable { await wallet.refresh() }
@@ -76,20 +100,33 @@ struct ReceiveView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 22) {
                     Text("接收 Pearl").font(.largeTitle.bold())
                     Text("此地址仅接收\(wallet.network == "mainnet" ? "主网" : "测试网") PRL。").foregroundStyle(.secondary)
                     if !wallet.receiveAddress.isEmpty {
                         if let image = qr(wallet.receiveAddress) {
                             Image(uiImage: image).interpolation(.none).resizable().scaledToFit()
-                                .frame(width: 240, height: 240).padding(20).background(.white, in: RoundedRectangle(cornerRadius: 20))
+                                .frame(width: 232, height: 232).padding(22)
+                                .background(.white, in: RoundedRectangle(cornerRadius: 24))
+                                .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
                         }
-                        Text(wallet.receiveAddress).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                        ShareLink(item: wallet.receiveAddress) { Label("分享地址", systemImage: "square.and.arrow.up") }
-                            .buttonStyle(.borderedProminent)
-                        Button("复制地址") { UIPasteboard.general.string = wallet.receiveAddress }
+                        Text(wallet.receiveAddress)
+                            .font(.system(.footnote, design: .monospaced))
+                            .multilineTextAlignment(.center).textSelection(.enabled)
+                            .padding(16).frame(maxWidth: .infinity)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+                        HStack(spacing: 12) {
+                            ShareLink(item: wallet.receiveAddress) {
+                                Label("分享", systemImage: "square.and.arrow.up")
+                                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                            }.buttonStyle(.borderedProminent)
+                            Button { UIPasteboard.general.string = wallet.receiveAddress } label: {
+                                Label("复制", systemImage: "doc.on.doc")
+                                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                            }.buttonStyle(.bordered)
+                        }
                     } else { ProgressView("正在准备地址…") }
-                }.padding(24)
+                }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
             }.navigationTitle("收款").navigationBarTitleDisplayMode(.inline)
         }
     }
@@ -123,6 +160,10 @@ struct ActivityView: View {
                             Text("\(NSDecimalNumber(decimal: tx.amount).stringValue) PRL").fontWeight(.medium)
                         }
                         Text(tx.confirmations > 0 ? "\(tx.confirmations) 次确认" : "待确认").font(.caption).foregroundStyle(.secondary)
+                        if tx.time > 0 {
+                            Text(Date(timeIntervalSince1970: TimeInterval(tx.time)).formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         Text(tx.txid).font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
                     }.padding(.vertical, 6)
                 }
@@ -136,6 +177,8 @@ struct SettingsView: View {
     @EnvironmentObject private var wallet: WalletModel
     @Environment(\.scenePhase) private var phase
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("autoLockMinutes") private var autoLockMinutes = 5
+    @AppStorage("lockImmediatelyOnBackground") private var lockImmediatelyOnBackground = false
     @State private var setupPassword = ""
     var body: some View {
         NavigationStack {
@@ -153,7 +196,7 @@ struct SettingsView: View {
                 }
                 Section("安全") {
                     Label("钱包已加密并保存在本机", systemImage: "iphone.gen3")
-                    Label("应用进入后台时自动锁定", systemImage: "lock.shield")
+                    Label("钱包会在闲置超时后自动锁定", systemImage: "lock.shield")
                     if let name = wallet.biometricName {
                         if wallet.biometricEnabled {
                             Label("已启用\(name)解锁", systemImage: name == "触控 ID" ? "touchid" : "faceid")
@@ -168,7 +211,7 @@ struct SettingsView: View {
                                 Task { _ = await wallet.enableBiometrics(password: secret) }
                             }.disabled(setupPassword.isEmpty || wallet.busy)
                         }
-                        Text("生物识别只用于解锁；发送交易仍需钱包密码。更改设备生物识别设置后，需要重新启用。")
+                        Text("生物识别可用于解锁和转账验证。更改设备生物识别设置后，需要重新启用。")
                             .font(.footnote).foregroundStyle(.secondary)
                     } else {
                         Text("设置设备密码并录入面容 ID 或触控 ID 后，即可启用生物识别解锁。")
@@ -178,8 +221,16 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                     Button("锁定钱包") { Task { await wallet.lock() } }
                 }
+                Section("自动锁定") {
+                    Stepper(value: $autoLockMinutes, in: 1...60) {
+                        Label("闲置 \(autoLockMinutes) 分钟后锁定", systemImage: "timer")
+                    }
+                    Toggle("切到后台立即锁定", isOn: $lockImmediatelyOnBackground)
+                    Text("关闭立即锁定时，返回应用只会在超过设定的闲置时间后要求重新解锁。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Section("关于") {
-                    Text("Pearl Wallet iOS · 0.2.0")
+                    Text("Pearl Wallet iOS · 0.3.0")
                     Text("社区分支 · 基于 Oyster 与 Pearl SPV")
                     Link("查看源代码", destination: URL(string: "https://github.com/apj9ehckiw/pearl/tree/codex/ios-wallet/apps/ios")!)
                 }

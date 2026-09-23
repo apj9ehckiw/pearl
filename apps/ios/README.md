@@ -14,15 +14,19 @@ fork, not an official Pearl Research Labs release.
 - Confirmed/pending balances, latest 50 activity entries, local signing and broadcast.
 - Mainnet and testnet2 with separate databases.
 - Simplified Chinese interface with system, light and dark appearance options.
-- Optional Face ID / Touch ID unlock after a password check; signing still requires
-  the wallet password. The unlock credential is held in a device-only Keychain
+- Optional Face ID / Touch ID unlock and transfer approval after a password check.
+  The credential is held in a device-only Keychain
   item that requires a device passcode and the current biometric enrollment.
-- Privacy cover when inactive, lock on background.
+- Native iOS 26 Liquid Glass tab bar when built with Xcode 26; standard system
+  tab bar remains on earlier iOS versions.
+- Privacy cover when inactive, idle auto-lock after a user-selected 1–60 minutes,
+  and an optional immediate lock when the app backgrounds.
 - App data excluded from cloud backup. Keep the recovery phrase offline.
 
 The app must stay in the foreground to sync. Restoring scans from genesis, which
-can take time and storage. Backgrounding closes the database and peer connections;
-unlocking resumes from saved state. No RPC port is opened on the phone.
+can take time and storage. If the app is suspended, synchronization resumes when
+it becomes active. Locking closes the database and peer connections. No RPC port
+is opened on the phone.
 If biometrics change or are unavailable, unlock with the wallet password and
 enable biometric unlock again. Biometric credentials are separate per network
 and do not migrate to another device.
@@ -36,7 +40,7 @@ Push to that branch to start **Pearl iOS Wallet**, or use its Run workflow butto
 once the workflow is available on the fork's default branch. The workflow has an
 explicit fork repository guard, read-only token permissions and no signing secrets.
 
-The macOS runner builds the Rust verifier and C/C++ XMSS libraries separately for
+The macOS 26 runner builds with Xcode 26. It builds the Rust verifier and C/C++ XMSS libraries separately for
 iPhone ARM64 and simulator ARM64, binds the Go core with gomobile, generates an
 Xcode project, runs simulator tests and archives the device app.
 
@@ -55,7 +59,7 @@ certificate, profile, wallet seed or password into this repository.
 
 ## Build locally (Mac with Xcode)
 
-Requires Go as specified in `go.mod`, stable Rust, Xcode + command line tools,
+Requires Go as specified in `go.mod`, stable Rust, Xcode 26 + command line tools,
 and XcodeGen (`brew install xcodegen`). From the repository root:
 
 ```sh
