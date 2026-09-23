@@ -7,13 +7,17 @@ struct SendView: View {
     @State private var address: String
     @State private var showAddressBook = false
     @State private var amount = ""
+    @State private var sendAll = false
+    @State private var useFixedChange = false
+    @State private var changeAddress = ""
+    @State private var sweepPreview: SweepPreview?
     @State private var fee = "1000"
     @State private var password = ""
     @State private var authorization = "password"
     @State private var confirming = false
     @State private var txid: String?
     @FocusState private var focusedField: Field?
-    private enum Field: Hashable { case address, amount, fee, password }
+    private enum Field: Hashable { case address, amount, fee, changeAddress, password }
     private var grains: Int64? { PearlAmount.grains(amount) }
     private var validFee: Int64? {
         guard let value = Int64(fee), (1000...10000000).contains(value) else { return nil }
@@ -44,9 +48,28 @@ struct SendView: View {
                         Button("从地址簿选择") { showAddressBook = true }
                     }
                     Section("金额") {
-                        TextField("PRL", text: $amount).keyboardType(.decimalPad)
-                            .focused($focusedField, equals: .amount)
+                        Toggle("发送全部（不生成找零）", isOn: $sendAll)
+                        if !sendAll {
+                            TextField("PRL", text: $amount).keyboardType(.decimalPad)
+                                .focused($focusedField, equals: .amount)
+                        } else {
+                            Text("将全部已确认、可花费的余额发送到收款地址；确认前会显示扣除手续费后的准确金额。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                         if let balance = wallet.snapshot?.balance { Text("已确认余额：\(PearlAmount.display(balance)) PRL").font(.caption) }
+                    }
+                    if !sendAll {
+                        Section {
+                            Toggle("找零退回网页钱包旧地址", isOn: $useFixedChange)
+                            if useFixedChange {
+                                TextField("网页钱包已识别的旧地址", text: $changeAddress)
+                                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                                    .focused($focusedField, equals: .changeAddress)
+                            }
+                        } header: { Text("网页钱包兼容") }
+                        footer: {
+                            Text("仅填写属于此钱包、且网页端已经识别的地址。钱包会验证归属；复用地址会降低隐私。留空则使用新的派生找零地址。")
+                        }
                     }
                     Section {
                         TextField("每 kB 的最小单位数", text: $fee).keyboardType(.numberPad)
@@ -69,10 +92,23 @@ struct SendView: View {
                         }
                         Text("确认前请核对地址、金额和费率。").font(.footnote)
                     }
-                    Button("核对转账") { focusedField = nil; confirming = true }
-                        .disabled(grains == nil || validFee == nil ||
+                    Button(sendAll ? "核对发送全部" : "核对转账") {
+                        focusedField = nil
+                        guard let feeValue = validFee else { return }
+                        if sendAll {
+                            Task {
+                                sweepPreview = await wallet.previewSweep(address: address, fee: feeValue)
+                                confirming = sweepPreview != nil
+                            }
+                        } else {
+                            sweepPreview = nil
+                            confirming = true
+                        }
+                    }
+                        .disabled((!sendAll && grains == nil) || validFee == nil ||
                             (!biometricAuthorization && password.isEmpty) ||
-                            address.isEmpty || wallet.busy || wallet.snapshot?.synced != true)
+                            address.isEmpty || (!sendAll && useFixedChange && changeAddress.isEmpty) ||
+                            wallet.busy || wallet.snapshot?.synced != true)
                 }
                 if wallet.busy { ProgressView("正在签名并广播…") }
             }
@@ -93,27 +129,47 @@ struct SendView: View {
                     .environmentObject(wallet)
             }
             .confirmationDialog("确认转账", isPresented: $confirming, titleVisibility: .visible) {
-                Button("发送 \(amount) PRL") {
-                    guard let value = grains, let feeValue = validFee else { return }
+                Button("发送 \(sendAll ? PearlAmount.display(sweepPreview?.amount ?? 0) : amount) PRL") {
+                    guard let feeValue = validFee else { return }
                     let secret = password; password = ""
                     let useBiometrics = biometricAuthorization
                     let recipient = address
+                    let sweepMode = sendAll
+                    let selectedChange = useFixedChange && !sendAll ? changeAddress : ""
+                    let preview = sweepPreview
                     Task {
-                        if useBiometrics {
-                            txid = await wallet.sendWithBiometrics(address: recipient, amount: value, fee: feeValue)
-                        } else {
-                            txid = await wallet.send(address: recipient, amount: value, fee: feeValue, password: secret)
+                        if sweepMode {
+                            guard let preview else { return }
+                            if useBiometrics {
+                                txid = await wallet.sweepWithBiometrics(address: recipient, fee: feeValue, preview: preview)
+                            } else {
+                                txid = await wallet.sweep(address: recipient, fee: feeValue, preview: preview, password: secret)
+                            }
+                        } else if let value = grains {
+                            if useBiometrics {
+                                txid = await wallet.sendWithBiometrics(address: recipient, amount: value,
+                                    fee: feeValue, changeAddress: selectedChange)
+                            } else {
+                                txid = await wallet.send(address: recipient, amount: value,
+                                    fee: feeValue, changeAddress: selectedChange, password: secret)
+                            }
                         }
                     }
                 }
                 Button("取消", role: .cancel) { }
             } message: {
-                Text("网络：\(wallet.network == "mainnet" ? "主网" : "测试网")\n收款地址：\(address)\n金额：\(amount) PRL\n费率：\(fee) grains/kB\n转账一经发送无法撤销。")
+                Text(sendAll
+                    ? "网络：\(wallet.network == "mainnet" ? "主网" : "测试网")\n收款地址：\(address)\n发送金额：\(PearlAmount.display(sweepPreview?.amount ?? 0)) PRL\n预计手续费：\(PearlAmount.display(sweepPreview?.fee ?? 0)) PRL\n输入数：\(sweepPreview?.inputs ?? 0)\n不会产生找零。转账无法撤销。"
+                    : "网络：\(wallet.network == "mainnet" ? "主网" : "测试网")\n收款地址：\(address)\n金额：\(amount) PRL\n找零地址：\(useFixedChange ? changeAddress : "新派生地址")\n费率：\(fee) grains/kB\n转账一经发送无法撤销。")
             }
             .onChange(of: phase) { value in if value == .background { password = ""; confirming = false } }
             .onChange(of: authorization) { value in if value == "biometric" { password = "" } }
             .onChange(of: wallet.biometricEnabled) { value in if !value { authorization = "password" } }
-            .onAppear { if wallet.biometricEnabled && wallet.biometricName != nil { authorization = "biometric" } }
+            .onAppear {
+                if wallet.biometricEnabled && wallet.biometricName != nil { authorization = "biometric" }
+                changeAddress = wallet.compatibleChangeAddress
+                useFixedChange = !changeAddress.isEmpty
+            }
         }
     }
 }

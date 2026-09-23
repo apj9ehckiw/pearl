@@ -3,6 +3,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -415,6 +416,19 @@ func validatePayment(address string, atoms, feePerKB int64, net *chaincfg.Params
 // Send signs locally and broadcasts once. Call only after explicit confirmation.
 // Amount and fee use integers to avoid floating point rounding.
 func Send(address string, atoms, feePerKB int64, password string) (string, error) {
+	return send(address, "", atoms, feePerKB, password)
+}
+
+// SendWithChangeAddress returns change to an existing address in this wallet's
+// BIP86 default account. It is intended for single-address wallet compatibility.
+func SendWithChangeAddress(address, changeAddress string, atoms, feePerKB int64, password string) (string, error) {
+	if strings.TrimSpace(changeAddress) == "" {
+		return "", errors.New("change address is required")
+	}
+	return send(address, changeAddress, atoms, feePerKB, password)
+}
+
+func send(address, changeAddress string, atoms, feePerKB int64, password string) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	if active == nil || !active.ChainSynced() {
@@ -429,6 +443,28 @@ func Send(address string, atoms, feePerKB int64, password string) (string, error
 	}
 	defer active.Lock()
 	scope := waddrmgr.KeyScopeBIP0086
+	if changeAddress != "" {
+		change, err := btcutil.DecodeAddress(strings.TrimSpace(changeAddress), params)
+		if err != nil || !change.IsForNet(params) {
+			return "", errors.New("invalid change address for this network")
+		}
+		created, err := active.CreateSimpleTx(&scope, waddrmgr.DefaultAccountNum,
+			[]*wire.TxOut{wire.NewTxOut(atoms, script)}, 1,
+			btcutil.Amount(feePerKB), wallet.CoinSelectionLargest, false,
+			wallet.WithChangeAddress(change))
+		if err != nil {
+			return "", err
+		}
+		changeScript, err := txscript.PayToAddrScript(change)
+		if err != nil || (created.ChangeIndex >= 0 &&
+			!bytes.Equal(created.Tx.TxOut[created.ChangeIndex].PkScript, changeScript)) {
+			return "", errors.New("change output does not match the selected address")
+		}
+		if err := active.PublishTransaction(created.Tx, ""); err != nil {
+			return "", err
+		}
+		return created.Tx.TxHash().String(), nil
+	}
 	tx, err := active.SendOutputs([]*wire.TxOut{wire.NewTxOut(atoms, script)}, &scope,
 		waddrmgr.DefaultAccountNum, 1, btcutil.Amount(feePerKB), wallet.CoinSelectionLargest, "")
 	if err != nil {

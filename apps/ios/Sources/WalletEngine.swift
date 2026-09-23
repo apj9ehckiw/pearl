@@ -113,9 +113,26 @@ actor WalletEngine {
         CoreValidateAddress(address)
     }
 
-    func send(address: String, grains: Int64, fee: Int64, password: String) throws -> String {
+    func send(address: String, grains: Int64, fee: Int64, changeAddress: String,
+              password: String) throws -> String {
         var error: NSError?
-        let result = CoreSend(address, grains, fee, password, &error)
+        let result = changeAddress.isEmpty
+            ? CoreSend(address, grains, fee, password, &error)
+            : CoreSendWithChangeAddress(address, changeAddress, grains, fee, password, &error)
+        if let error { throw error }
+        return result
+    }
+
+    func previewSweep(address: String, fee: Int64) throws -> SweepPreview {
+        var error: NSError?
+        let json = CorePreviewSweep(address, fee, &error)
+        if let error { throw error }
+        return try JSONDecoder().decode(SweepPreview.self, from: Data(json.utf8))
+    }
+
+    func sweep(address: String, fee: Int64, preview: SweepPreview, password: String) throws -> String {
+        var error: NSError?
+        let result = CoreSweep(address, fee, preview.amount, preview.fee, preview.inputs, password, &error)
         if let error { throw error }
         return result
     }
@@ -146,6 +163,12 @@ struct WalletSnapshot: Decodable {
     var peerHeight: Int
     var walletHeight: Int
     var transactions: [WalletTransaction]?
+}
+
+struct SweepPreview: Decodable {
+    let amount: Int64
+    let fee: Int64
+    let inputs: Int
 }
 
 struct WalletTransaction: Decodable {

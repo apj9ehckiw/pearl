@@ -14,6 +14,12 @@ fork, not an official Pearl Research Labs release.
 - BIP86 Pearl receiving address, QR code and share sheet.
 - Local, network-specific address book with validated destinations and send-time picking.
 - Confirmed/pending balances, latest 50 activity entries, local signing and broadcast.
+- Send all confirmed, spendable funds to one address with an exact amount/fee
+  preview and no change output. This can consolidate HD change into an address
+  recognized by a single-address wallet.
+- Optional fixed change address for regular sends. The wallet accepts only an
+  address already controlled by the selected BIP86 account; the confirmation
+  sheet displays it before signing. This reuses an address and reduces privacy.
 - Wallet dashboard shows the last completed sync time for the selected network;
   the send form has a keyboard-dismiss control for numeric entry.
 - Animated synchronization indicator and a rough ETA based on wallet scan progress.
@@ -50,6 +56,11 @@ The encrypted recovery phrase is saved only for wallets created or imported by
 this version. Earlier wallet databases cannot reconstruct the original BIP39
 words; use the offline backup made at creation. The single-address WIF needs a
 wallet that handles BIP86 Taproot tweaking and cannot restore the whole wallet.
+If a web wallet only displays one address, use **Send all** to consolidate into
+that web wallet's verified receive address. Review the exact destination, amount
+and fee before confirming. Ordinary sends may create new change; the fixed
+change option can keep future change on an address that web wallet already
+tracks. The app does not change any existing on-chain transaction.
 If biometrics change or are unavailable, unlock with the wallet password and
 enable biometric unlock again. Biometric credentials are separate per network
 and do not migrate to another device.

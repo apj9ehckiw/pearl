@@ -157,7 +157,8 @@ func (w *Wallet) txToOutputs(outputs []*wire.TxOut,
 	account uint32, minconf int32, feeSatPerKb btcutil.Amount,
 	strategy CoinSelectionStrategy, dryRun bool,
 	selectedUtxos []wire.OutPoint,
-	allowUtxo func(utxo wtxmgr.Credit) bool) (
+	allowUtxo func(utxo wtxmgr.Credit) bool,
+	changeAddress btcutil.Address) (
 	*txauthor.AuthoredTx, error) {
 
 	chainClient, err := w.requireChainClient()
@@ -195,6 +196,20 @@ func (w *Wallet) txToOutputs(outputs []*wire.TxOut,
 		)
 		if err != nil {
 			return err
+		}
+		if changeAddress != nil {
+			manager, addressAccount, err := w.Manager.AddrAccount(addrmgrNs, changeAddress)
+			if err != nil {
+				return fmt.Errorf("change address is not controlled by this wallet: %w", err)
+			}
+			if addressAccount != account || changeKeyScope == nil || manager.Scope() != *changeKeyScope {
+				return errors.New("change address is not in the selected wallet account")
+			}
+			changeScript, err := txscript.PayToAddrScript(changeAddress)
+			if err != nil || !txscript.IsPayToTaproot(changeScript) {
+				return errors.New("change address must be a Taproot address")
+			}
+			changeSource.NewScript = func() ([]byte, error) { return changeScript, nil }
 		}
 
 		eligible, err := w.findEligibleOutputs(

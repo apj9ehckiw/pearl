@@ -81,7 +81,7 @@ func TestTxToOutputsDryRun(t *testing.T) {
 	// database us not inflated.
 	dryRunTx, err := w.txToOutputs(
 		txOuts, nil, nil, 0, 1, 1000, CoinSelectionLargest, true,
-		nil, alwaysAllowUtxo,
+		nil, alwaysAllowUtxo, nil,
 	)
 	if err != nil {
 		t.Fatalf("unable to author tx: %v", err)
@@ -99,7 +99,7 @@ func TestTxToOutputsDryRun(t *testing.T) {
 
 	dryRunTx2, err := w.txToOutputs(
 		txOuts, nil, nil, 0, 1, 1000, CoinSelectionLargest, true,
-		nil, alwaysAllowUtxo,
+		nil, alwaysAllowUtxo, nil,
 	)
 	if err != nil {
 		t.Fatalf("unable to author tx: %v", err)
@@ -135,7 +135,7 @@ func TestTxToOutputsDryRun(t *testing.T) {
 	// to the database.
 	tx, err := w.txToOutputs(
 		txOuts, nil, nil, 0, 1, 1000, CoinSelectionLargest, false,
-		nil, alwaysAllowUtxo,
+		nil, alwaysAllowUtxo, nil,
 	)
 	if err != nil {
 		t.Fatalf("unable to author tx: %v", err)
@@ -166,6 +166,33 @@ func TestTxToOutputsDryRun(t *testing.T) {
 		t.Fatalf("dry-run using different change address " +
 			"than wet run")
 	}
+}
+
+func TestTxToOutputsFixedChangeAddress(t *testing.T) {
+	t.Parallel()
+	w, cleanup := testWallet(t)
+	defer cleanup()
+
+	scope := waddrmgr.KeyScopeBIP0086
+	addr, err := w.CurrentAddress(0, scope)
+	require.NoError(t, err)
+	script, err := txscript.PayToAddrScript(addr)
+	require.NoError(t, err)
+	addUtxo(t, w, &wire.MsgTx{
+		TxIn:  []*wire.TxIn{{}},
+		TxOut: []*wire.TxOut{wire.NewTxOut(100000, script)},
+	})
+	created, err := w.txToOutputs(
+		[]*wire.TxOut{wire.NewTxOut(10000, script)}, &scope,
+		&scope, 0, 1, 1000, CoinSelectionLargest, true,
+		nil, alwaysAllowUtxo, addr,
+	)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, created.ChangeIndex, 0)
+	require.Equal(t, script, created.Tx.TxOut[created.ChangeIndex].PkScript)
+	addresses, err := w.AccountAddresses(0)
+	require.NoError(t, err)
+	require.Len(t, addresses, 1, "fixed change must not derive a new address")
 }
 
 // addUtxo add the given transaction to the wallet's database marked as a
@@ -328,7 +355,7 @@ func TestTxToOutputsRandom(t *testing.T) {
 	createTx := func() *txauthor.AuthoredTx {
 		tx, err := w.txToOutputs(
 			txOuts, nil, nil, 0, 1, feeSatPerKb,
-			CoinSelectionRandom, true, nil, alwaysAllowUtxo,
+			CoinSelectionRandom, true, nil, alwaysAllowUtxo, nil,
 		)
 		require.NoError(t, err)
 		return tx
@@ -400,7 +427,7 @@ func TestCreateSimpleCustomChange(t *testing.T) {
 	}
 	tx1, err := w.txToOutputs(
 		[]*wire.TxOut{targetTxOut}, nil, nil, 0, 1, 1000,
-		CoinSelectionLargest, true, nil, alwaysAllowUtxo,
+		CoinSelectionLargest, true, nil, alwaysAllowUtxo, nil,
 	)
 	require.NoError(t, err)
 
@@ -426,7 +453,7 @@ func TestCreateSimpleCustomChange(t *testing.T) {
 	tx2, err := w.txToOutputs(
 		[]*wire.TxOut{targetTxOut}, &waddrmgr.KeyScopeBIP0086,
 		&waddrmgr.KeyScopeBIP0086, 0, 1, 1000, CoinSelectionLargest,
-		true, nil, alwaysAllowUtxo,
+		true, nil, alwaysAllowUtxo, nil,
 	)
 	require.NoError(t, err)
 
@@ -563,7 +590,7 @@ func TestSelectUtxosTxoToOutpoint(t *testing.T) {
 			tx1, err := w.txToOutputs(
 				[]*wire.TxOut{targetTxOut}, nil, nil, 0, 1,
 				1000, CoinSelectionLargest, true,
-				tc.selectUTXOs, alwaysAllowUtxo,
+				tc.selectUTXOs, alwaysAllowUtxo, nil,
 			)
 			if tc.errString != "" {
 				require.ErrorContains(t, err, tc.errString)

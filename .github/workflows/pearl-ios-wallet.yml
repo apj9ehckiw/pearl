@@ -37,6 +37,7 @@ jobs:
       - name: Test mobile core
         run: |
           go test -race -timeout 600s ./mobile/core ./spv/headerfs
+          go test -race -timeout 300s ./wallet/wallet -run '^TestTxToOutputsFixedChangeAddress$'
           go test -race -timeout 300s ./wallet/chain -run '^TestNeutrino'
       - name: Restore native iOS framework
         id: native-cache

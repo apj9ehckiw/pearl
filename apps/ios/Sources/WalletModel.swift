@@ -13,6 +13,7 @@ final class WalletModel: ObservableObject {
     @Published var receiveAddress = ""
     @Published var network = UserDefaults.standard.string(forKey: "network") ?? "mainnet"
     @Published var syncPeer = ""
+    @Published var compatibleChangeAddress = ""
     @Published var biometricName: String?
     @Published var biometricEnabled = false
     private var generation = 0
@@ -23,6 +24,7 @@ final class WalletModel: ObservableObject {
     func initialize() async {
         initialized = false
         syncPeer = UserDefaults.standard.string(forKey: "syncPeer.\(network)") ?? ""
+        compatibleChangeAddress = UserDefaults.standard.string(forKey: "changeAddress.\(network)") ?? ""
         lastSyncedAt = LastSyncTime.load(network: network)
         biometricName = BiometricStore.availableName()
         biometricEnabled = UserDefaults.standard.bool(forKey: biometricKey)
@@ -181,18 +183,20 @@ final class WalletModel: ObservableObject {
         }
     }
 
-    func send(address: String, amount: Int64, fee: Int64, password: String) async -> String? {
+    func send(address: String, amount: Int64, fee: Int64, changeAddress: String = "", password: String) async -> String? {
         guard unlocked, !busy else { return nil }
         busy = true
         defer { busy = false }
         do {
-            let txid = try await engine.send(address: address, grains: amount, fee: fee, password: password)
+            let txid = try await engine.send(address: address, grains: amount, fee: fee,
+                changeAddress: changeAddress, password: password)
+            saveChangeAddress(changeAddress)
             return txid
         }
         catch { self.error = "\(message(error))\n重试前请先查看交易记录；交易可能已经广播。"; return nil }
     }
 
-    func sendWithBiometrics(address: String, amount: Int64, fee: Int64) async -> String? {
+    func sendWithBiometrics(address: String, amount: Int64, fee: Int64, changeAddress: String = "") async -> String? {
         guard unlocked, biometricEnabled, biometricName != nil, !busy else { return nil }
         busy = true
         defer { busy = false }
@@ -202,8 +206,51 @@ final class WalletModel: ObservableObject {
             let password = try await BiometricStore.shared.read(network: selectedNetwork,
                 reason: "验证并发送 \(PearlAmount.display(amount)) PRL")
             guard request == generation, unlocked, selectedNetwork == network else { return nil }
-            let txid = try await engine.send(address: address, grains: amount, fee: fee, password: password)
+            let txid = try await engine.send(address: address, grains: amount, fee: fee,
+                changeAddress: changeAddress, password: password)
+            saveChangeAddress(changeAddress)
             return txid
+        } catch BiometricStoreError.cancelled {
+            return nil
+        } catch {
+            self.error = "\(message(error))\n重试前请先查看交易记录；交易可能已经广播。"
+            return nil
+        }
+    }
+
+    private func saveChangeAddress(_ address: String) {
+        guard !address.isEmpty else { return }
+        UserDefaults.standard.set(address, forKey: "changeAddress.\(network)")
+        compatibleChangeAddress = address
+    }
+
+    func previewSweep(address: String, fee: Int64) async -> SweepPreview? {
+        guard unlocked, !busy else { return nil }
+        busy = true
+        defer { busy = false }
+        do { return try await engine.previewSweep(address: address, fee: fee) }
+        catch { self.error = message(error); return nil }
+    }
+
+    func sweep(address: String, fee: Int64, preview: SweepPreview, password: String) async -> String? {
+        guard unlocked, !busy else { return nil }
+        busy = true
+        defer { busy = false }
+        do { return try await engine.sweep(address: address, fee: fee, preview: preview, password: password) }
+        catch { self.error = "\(message(error))\n重试前请先查看交易记录；交易可能已经广播。"; return nil }
+    }
+
+    func sweepWithBiometrics(address: String, fee: Int64, preview: SweepPreview) async -> String? {
+        guard unlocked, biometricEnabled, biometricName != nil, !busy else { return nil }
+        busy = true
+        defer { busy = false }
+        let request = generation
+        let selectedNetwork = network
+        do {
+            let password = try await BiometricStore.shared.read(network: selectedNetwork,
+                reason: "验证并发送全部 \(PearlAmount.display(preview.amount)) PRL")
+            guard request == generation, unlocked, selectedNetwork == network else { return nil }
+            return try await engine.sweep(address: address, fee: fee, preview: preview, password: password)
         } catch BiometricStoreError.cancelled {
             return nil
         } catch {
@@ -264,6 +311,10 @@ final class WalletModel: ObservableObject {
         if lower.contains("invalid address") { return "地址无效，或与当前网络不匹配。" }
         if lower.contains("invalid amount") { return "发送金额无效。" }
         if lower.contains("fee must") { return "手续费率超出允许范围。" }
+        if lower.contains("change address is not") { return "找零地址不属于此钱包的主账户，请核对网页钱包的旧地址。" }
+        if lower.contains("invalid change address") { return "找零地址无效，或与当前网络不匹配。" }
+        if lower.contains("review the send-all quote") { return "余额已变化，请重新核对“发送全部”的金额和手续费。" }
+        if lower.contains("no confirmed spendable outputs") { return "没有已确认且可花费的余额。" }
         if lower.contains("wallet is closed") { return "钱包已锁定，请重新解锁。" }
         if lower.contains("wallet already open") { return "钱包已经打开。" }
         if lower.contains("recovery phrase unavailable") { return "此钱包创建时未保存原助记词，无法从现有密钥还原。请使用创建时离线备份的 24 个词。" }

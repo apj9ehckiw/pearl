@@ -1283,6 +1283,7 @@ type (
 		resp                  chan createTxResponse
 		selectUtxos           []wire.OutPoint
 		allowUtxo             func(wtxmgr.Credit) bool
+		changeAddress         btcutil.Address
 	}
 	createTxResponse struct {
 		tx  *txauthor.AuthoredTx
@@ -1325,6 +1326,7 @@ out:
 				txr.changeKeyScope, txr.account, txr.minconf,
 				txr.feeSatPerKB, txr.coinSelectionStrategy,
 				txr.dryRun, txr.selectUtxos, txr.allowUtxo,
+				txr.changeAddress,
 			)
 
 			release()
@@ -1343,6 +1345,7 @@ type txCreateOptions struct {
 	changeKeyScope *waddrmgr.KeyScope
 	selectUtxos    []wire.OutPoint
 	allowUtxo      func(wtxmgr.Credit) bool
+	changeAddress  btcutil.Address
 }
 
 // TxCreateOption is a set of optional arguments to modify the tx creation
@@ -1370,6 +1373,15 @@ func WithCustomChangeScope(changeScope *waddrmgr.KeyScope) TxCreateOption {
 func WithCustomSelectUtxos(utxos []wire.OutPoint) TxCreateOption {
 	return func(opts *txCreateOptions) {
 		opts.selectUtxos = utxos
+	}
+}
+
+// WithChangeAddress reuses an address already controlled by this account for
+// change. This is useful when interoperating with single-address clients.
+// Transaction creation rejects addresses outside the selected scope/account.
+func WithChangeAddress(address btcutil.Address) TxCreateOption {
+	return func(opts *txCreateOptions) {
+		opts.changeAddress = address
 	}
 }
 
@@ -1427,6 +1439,7 @@ func (w *Wallet) CreateSimpleTx(coinSelectKeyScope *waddrmgr.KeyScope,
 		resp:                  make(chan createTxResponse),
 		selectUtxos:           opts.selectUtxos,
 		allowUtxo:             opts.allowUtxo,
+		changeAddress:         opts.changeAddress,
 	}
 	w.createTxRequests <- req
 	resp := <-req.resp
