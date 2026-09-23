@@ -39,14 +39,17 @@ enum BackgroundNotifications {
         } catch { return false }
     }
 
+    @MainActor
     static func record(_ snapshot: WalletSnapshot, network: String, alert: Bool) async {
         guard snapshot.synced else { return }
         let key = "notificationSeen.\(network)"
         let previous = UserDefaults.standard.stringArray(forKey: key)
         let oldIDs = Set(previous ?? [])
-        let incoming = Set((snapshot.transactions ?? [])
-            .filter { $0.category == "receive" || $0.category == "generate" }
-            .map(\.txid))
+        let transactions = snapshot.transactions ?? []
+        let sentIDs = Set(transactions.filter { $0.category == "send" }.map(\.txid))
+        let incoming = Set(transactions
+            .filter { ["receive", "generate", "immature"].contains($0.category) }
+            .map(\.txid)).subtracting(sentIDs)
         let newIDs = incoming.subtracting(oldIDs)
         var remembered = previous ?? []
         remembered.append(contentsOf: newIDs.sorted())

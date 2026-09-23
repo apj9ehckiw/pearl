@@ -99,6 +99,10 @@ actor WalletEngine {
         return result
     }
 
+    func validateAddress(_ address: String) -> Bool {
+        CoreValidateAddress(address)
+    }
+
     func send(address: String, grains: Int64, fee: Int64, password: String) throws -> String {
         var error: NSError?
         let result = CoreSend(address, grains, fee, password, &error)
@@ -130,6 +134,7 @@ struct WalletSnapshot: Decodable {
     var synced: Bool
     var height: Int
     var peerHeight: Int
+    var walletHeight: Int
     var transactions: [WalletTransaction]?
 }
 

@@ -8,12 +8,14 @@ final class WalletModel: ObservableObject {
     @Published var initialized = false
     @Published var error: String?
     @Published var snapshot: WalletSnapshot?
+    @Published var syncRemaining: TimeInterval?
     @Published var receiveAddress = ""
     @Published var network = UserDefaults.standard.string(forKey: "network") ?? "mainnet"
     @Published var biometricName: String?
     @Published var biometricEnabled = false
     private var generation = 0
     private var lastActivity = Date()
+    private var syncEstimator = SyncEstimator()
     private let engine = WalletEngine.shared
 
     func initialize() async {
@@ -111,11 +113,7 @@ final class WalletModel: ObservableObject {
         guard request == generation else { return }
         receiveAddress = address
         let result = try await engine.status()
-        if request == generation {
-            snapshot = result
-            await BackgroundNotifications.record(result, network: network,
-                                                 alert: UIApplication.shared.applicationState == .background)
-        }
+        if request == generation { await accept(result) }
     }
 
     func refresh() async {
@@ -123,11 +121,7 @@ final class WalletModel: ObservableObject {
         let request = generation
         do {
             let result = try await engine.status()
-            if request == generation {
-                snapshot = result
-                await BackgroundNotifications.record(result, network: network,
-                                                     alert: UIApplication.shared.applicationState == .background)
-            }
+            if request == generation { await accept(result) }
         } catch { if request == generation { self.error = message(error) } }
     }
 
@@ -147,6 +141,8 @@ final class WalletModel: ObservableObject {
         generation += 1
         unlocked = false
         snapshot = nil
+        syncRemaining = nil
+        syncEstimator = SyncEstimator()
         receiveAddress = ""
         do { try await engine.close() }
         catch { self.error = message(error) }
@@ -226,6 +222,20 @@ final class WalletModel: ObservableObject {
             self.error = message(error)
             return nil
         }
+    }
+
+    func validateAddress(_ address: String) async -> Bool {
+        guard unlocked else { return false }
+        return await engine.validateAddress(address)
+    }
+
+    private func accept(_ result: WalletSnapshot) async {
+        snapshot = result
+        syncRemaining = syncEstimator.update(walletHeight: result.walletHeight,
+                                             peerHeight: result.peerHeight,
+                                             synced: result.synced)
+        await BackgroundNotifications.record(result, network: network,
+                                             alert: UIApplication.shared.applicationState == .background)
     }
 
     private func message(_ error: Error) -> String {

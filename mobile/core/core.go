@@ -288,9 +288,26 @@ func Status() (string, error) {
 	data, err := json.Marshal(map[string]any{
 		"balance": int64(balance), "pending": int64(total - balance),
 		"synced": active.ChainSynced(), "height": height, "peerHeight": peerHeight,
+		"walletHeight": active.SyncedTo().Height,
 		"transactions": txs,
 	})
 	return string(data), err
+}
+
+// ValidateAddress checks the selected Pearl network and supported output type
+// before a destination is stored in the local address book.
+func ValidateAddress(address string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	if params == nil {
+		return false
+	}
+	decoded, err := btcutil.DecodeAddress(strings.TrimSpace(address), params)
+	if err != nil || !decoded.IsForNet(params) {
+		return false
+	}
+	_, err = txscript.PayToAddrScript(decoded)
+	return err == nil
 }
 
 // ReceiveAddress reuses the current unused BIP86 address, matching Oyster.

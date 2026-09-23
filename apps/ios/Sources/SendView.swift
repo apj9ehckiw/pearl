@@ -4,7 +4,8 @@ struct SendView: View {
     @EnvironmentObject private var wallet: WalletModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
-    @State private var address = ""
+    @State private var address: String
+    @State private var showAddressBook = false
     @State private var amount = ""
     @State private var fee = "1000"
     @State private var password = ""
@@ -20,18 +21,23 @@ struct SendView: View {
         authorization == "biometric" && wallet.biometricEnabled && wallet.biometricName != nil
     }
 
+    init(initialAddress: String = "") {
+        _address = State(initialValue: initialAddress)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 if let txid {
                     Section {
-                        Label("交易已广播", systemImage: "checkmark.circle.fill").foregroundStyle(.teal)
+                        Label("交易已广播", systemImage: "checkmark.circle.fill").foregroundStyle(PearlTheme.accent)
                         Text(txid).font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
                         Text("请在交易记录中查看网络确认进度。").foregroundStyle(.secondary)
                     }
                 } else {
                     Section("收款方") {
                         TextField("Pearl 地址", text: $address).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("从地址簿选择") { showAddressBook = true }
                     }
                     Section("金额") {
                         TextField("PRL", text: $amount).keyboardType(.decimalPad)
@@ -67,6 +73,10 @@ struct SendView: View {
             .navigationTitle("发送 Pearl")
             .toolbar { Button("完成") { password = ""; dismiss() }.disabled(wallet.busy) }
             .interactiveDismissDisabled(wallet.busy)
+            .sheet(isPresented: $showAddressBook) {
+                AddressBookPickerView { entry in address = entry.address }
+                    .environmentObject(wallet)
+            }
             .confirmationDialog("确认转账", isPresented: $confirming, titleVisibility: .visible) {
                 Button("发送 \(amount) PRL") {
                     guard let value = grains, let feeValue = validFee else { return }

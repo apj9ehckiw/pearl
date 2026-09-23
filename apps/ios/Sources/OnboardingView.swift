@@ -64,7 +64,7 @@ struct OnboardingView: View {
                                 ForEach(Array(phrase.split(separator: " ").enumerated()), id: \.offset) { index, word in
                                     Text("\(index + 1). \(word)").font(.system(.callout, design: .monospaced))
                                 }
-                            }.padding().background(.teal.opacity(0.08), in: RoundedRectangle(cornerRadius: 16)).privacySensitive()
+                            }.padding().background(PearlTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16)).privacySensitive()
                             Toggle("我已离线备份恢复短语", isOn: $backedUp)
                             TextField("按顺序输入第 3、12、24 个单词，以空格分隔", text: $verification)
                                 .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
@@ -112,13 +112,13 @@ private struct WalletEmblem: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 18)
-                .fill(LinearGradient(colors: [.teal, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(LinearGradient(colors: [PearlTheme.accent, PearlTheme.highlight], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .frame(width: 74, height: 58).offset(y: 7)
             RoundedRectangle(cornerRadius: 8)
                 .fill(.white.opacity(0.30))
                 .frame(width: 55, height: 12).offset(x: -5, y: -19)
             RoundedRectangle(cornerRadius: 10)
-                .fill(.teal)
+                .fill(PearlTheme.accent)
                 .shadow(color: .black.opacity(0.15), radius: 2, y: 2)
                 .frame(width: 34, height: 28).offset(x: 24, y: 6)
             Circle().fill(.white).frame(width: 8, height: 8).offset(x: 25, y: 6)

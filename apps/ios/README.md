@@ -11,9 +11,12 @@ fork, not an official Pearl Research Labs release.
 - Private keys encrypted by Oyster in the app sandbox; no remote wallet service.
 - Direct SPV synchronization, with **XMSS and ZK verification enabled**.
 - BIP86 Pearl receiving address, QR code and share sheet.
+- Local, network-specific address book with validated destinations and send-time picking.
 - Confirmed/pending balances, latest 50 activity entries, local signing and broadcast.
+- Animated synchronization indicator and a rough ETA based on wallet scan progress.
 - Mainnet and testnet2 with separate databases.
 - Simplified Chinese interface with system, light and dark appearance options.
+- Light blue accent throughout the native interface.
 - Optional Face ID / Touch ID unlock and transfer approval after a password check.
   The credential is held in a device-only Keychain
   item that requires a device passcode and the current biometric enrollment.

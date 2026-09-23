@@ -19,12 +19,16 @@ struct PearlWalletApp: App {
                 if scenePhase != .active || checkingForeground {
                     Color(.systemBackground).ignoresSafeArea()
                     Label("Pearl 内容已隐藏", systemImage: "eye.slash.fill")
-                        .font(.title2).foregroundStyle(.teal)
+                        .font(.title2).foregroundStyle(PearlTheme.accent)
                 }
             }
-            .tint(.teal)
+            .tint(PearlTheme.accent)
             .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
-            .task { await wallet.initialize() }
+            .task {
+                if UIApplication.shared.applicationState != .background {
+                    await wallet.initialize()
+                }
+            }
             .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in wallet.noteActivity() })
             .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidChangeNotification)) { _ in wallet.noteActivity() }
             .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { _ in wallet.noteActivity() }
@@ -46,6 +50,7 @@ struct PearlWalletApp: App {
                 } else if phase == .active {
                     let shouldLockImmediately = wasBackgrounded && lockImmediatelyOnBackground
                     Task {
+                        if !wallet.initialized { await wallet.initialize() }
                         if shouldLockImmediately { await wallet.lock() }
                         else { await wallet.lockIfExpired() }
                         wasBackgrounded = false

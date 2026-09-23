@@ -17,10 +17,11 @@ struct RootView: View {
     private var walletTabs: some View {
         TabView(selection: $selectedTab) {
             DashboardView(onReceive: { selectedTab = 1 })
-                .tabItem { Label("钱包", systemImage: "circle.hexagongrid.fill") }.tag(0)
+                .tabItem { Label("钱包", systemImage: "wallet.pass.fill") }.tag(0)
             ReceiveView().tabItem { Label("收款", systemImage: "qrcode") }.tag(1)
             ActivityView().tabItem { Label("记录", systemImage: "clock") }.tag(2)
-            SettingsView().tabItem { Label("设置", systemImage: "gearshape") }.tag(3)
+            AddressBookView().tabItem { Label("地址簿", systemImage: "person.crop.rectangle.stack") }.tag(3)
+            SettingsView().tabItem { Label("设置", systemImage: "gearshape") }.tag(4)
         }
         .onChange(of: selectedTab) { _ in wallet.noteActivity() }
         .task {
@@ -43,9 +44,9 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         HStack {
                             Label(wallet.network == "mainnet" ? "PEARL 主网" : "PEARL 测试网", systemImage: "circle.fill")
-                                .font(.caption.weight(.semibold)).foregroundStyle(.teal)
+                                .font(.caption.weight(.semibold)).foregroundStyle(PearlTheme.accent)
                             Spacer()
-                            Image(systemName: "shield.lefthalf.filled").foregroundStyle(.teal)
+                            Image(systemName: "shield.lefthalf.filled").foregroundStyle(PearlTheme.accent)
                         }
                         Text("可用余额").font(.subheadline).foregroundStyle(.secondary)
                         Text(wallet.snapshot.map { PearlAmount.display($0.balance) } ?? "—")
@@ -58,10 +59,10 @@ struct DashboardView: View {
                         }
                     }
                     .padding(26).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(LinearGradient(colors: [.teal.opacity(0.18), .cyan.opacity(0.06)],
+                    .background(LinearGradient(colors: [PearlTheme.accent.opacity(0.18), PearlTheme.highlight.opacity(0.12)],
                         startPoint: .topLeading, endPoint: .bottomTrailing),
                         in: RoundedRectangle(cornerRadius: 28))
-                    .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(.teal.opacity(0.15)))
+                    .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(PearlTheme.accent.opacity(0.15)))
                     HStack(spacing: 12) {
                         Button { showSend = true } label: {
                             Label("发送", systemImage: "arrow.up.right")
@@ -74,10 +75,29 @@ struct DashboardView: View {
                         }.buttonStyle(.bordered)
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        Label(wallet.snapshot?.synced == true ? "钱包已同步" : "正在与 Pearl 节点同步",
-                              systemImage: wallet.snapshot?.synced == true ? "checkmark.shield" : "arrow.triangle.2.circlepath")
+                        if wallet.snapshot?.synced == true {
+                            Label("钱包已同步", systemImage: "checkmark.shield")
+                        } else {
+                            HStack(spacing: 9) {
+                                ProgressView().tint(PearlTheme.accent)
+                                Text("正在与 Pearl 节点同步")
+                            }
+                        }
                         if let snapshot = wallet.snapshot {
                             Text("区块头 \(snapshot.height) / \(snapshot.peerHeight)").font(.caption).foregroundStyle(.secondary)
+                            if !snapshot.synced {
+                                Text("钱包扫描 \(max(0, snapshot.walletHeight)) / \(snapshot.peerHeight)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                if let remaining = wallet.syncRemaining {
+                                    Text(SyncEstimator.label(remaining))
+                                        .font(.caption.weight(.medium)).foregroundStyle(PearlTheme.accent)
+                                } else {
+                                    Text(snapshot.peerHeight <= 0 ? "正在连接节点…" :
+                                         snapshot.peerHeight > snapshot.walletHeight
+                                         ? "正在估算剩余时间…" : "正在完成交易扫描…")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
                         }
                         Text("请保持应用打开以完成同步。导入钱包需要从区块链起点扫描。")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -251,7 +271,7 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("关于") {
-                    Text("Pearl Wallet iOS · 0.4.0")
+                    Text("Pearl Wallet iOS · 0.5.0")
                     Text("社区分支 · 基于 Oyster 与 Pearl SPV")
                     Link("查看源代码", destination: URL(string: "https://github.com/apj9ehckiw/pearl/tree/codex/ios-wallet/apps/ios")!)
                 }

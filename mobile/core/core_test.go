@@ -95,14 +95,18 @@ func TestEncryptedWalletRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	var snapshot struct {
-		Balance int64
-		Synced  bool
+		Balance      int64
+		Synced       bool
+		WalletHeight int
 	}
 	if err := json.Unmarshal([]byte(status), &snapshot); err != nil {
 		t.Fatal(err)
 	}
 	if snapshot.Balance != 0 || snapshot.Synced {
 		t.Fatal("unexpected fresh wallet state")
+	}
+	if snapshot.WalletHeight < 0 {
+		t.Fatal("negative wallet scan height")
 	}
 	if !active.Locked() {
 		t.Fatal("opening left private keys unlocked")
@@ -191,6 +195,19 @@ func TestPaymentValidation(t *testing.T) {
 	}
 	if _, err = validatePayment(addr.EncodeAddress(), 10000, 1000, &chaincfg.MainNetParams); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := Initialize(t.TempDir(), "mainnet"); err != nil {
+		t.Fatal(err)
+	}
+	if !ValidateAddress(addr.EncodeAddress()) || ValidateAddress("invalid") {
+		t.Fatal("address book accepted an invalid mainnet destination")
+	}
+	testAddress, err := btcutil.NewAddressTaproot(make([]byte, 32), &chaincfg.TestNet2Params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ValidateAddress(testAddress.EncodeAddress()) {
+		t.Fatal("address book accepted wrong network")
 	}
 	for _, tc := range []struct {
 		amount, fee int64

@@ -42,7 +42,7 @@ struct SecretExportView: View {
                             }.padding(.vertical, 8).privacySensitive()
                         } else {
                             Text(secret.value).font(.system(.body, design: .monospaced))
-                                .textSelection(.enabled).privacySensitive()
+                                .privacySensitive()
                         }
                         Button("复制到本机剪贴板（1 分钟后过期）") {
                             UIPasteboard.general.setItems(
@@ -63,11 +63,12 @@ struct SecretExportView: View {
                         Button("校验并显示") {
                             let input = password
                             password = ""
+                            let id = UUID()
+                            revealID = id
                             Task {
-                                if let result = await wallet.exportSecret(kind: kind, password: input) {
+                                if let result = await wallet.exportSecret(kind: kind, password: input),
+                                   revealID == id, phase == .active, wallet.unlocked {
                                     secret = result
-                                    let id = UUID()
-                                    revealID = id
                                     try? await Task.sleep(nanoseconds: 60_000_000_000)
                                     if revealID == id { hide() }
                                 }
