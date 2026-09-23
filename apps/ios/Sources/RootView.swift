@@ -134,6 +134,7 @@ struct ActivityView: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var wallet: WalletModel
+    @Environment(\.scenePhase) private var phase
     @AppStorage("appearance") private var appearance = "system"
     @State private var setupPassword = ""
     var body: some View {
@@ -155,7 +156,7 @@ struct SettingsView: View {
                     Label("应用进入后台时自动锁定", systemImage: "lock.shield")
                     if let name = wallet.biometricName {
                         if wallet.biometricEnabled {
-                            Label("已启用\(name)解锁", systemImage: "faceid")
+                            Label("已启用\(name)解锁", systemImage: name == "触控 ID" ? "touchid" : "faceid")
                             Button("关闭生物识别解锁") { Task { await wallet.disableBiometrics() } }
                                 .disabled(wallet.busy)
                         } else {
@@ -183,6 +184,7 @@ struct SettingsView: View {
                     Link("查看源代码", destination: URL(string: "https://github.com/apj9ehckiw/pearl/tree/codex/ios-wallet/apps/ios")!)
                 }
             }.navigationTitle("设置")
+                .onChange(of: phase) { value in if value == .background { setupPassword = "" } }
         }
     }
 }

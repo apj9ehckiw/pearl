@@ -70,9 +70,15 @@ final class WalletModel: ObservableObject {
         busy = true
         defer { busy = false }
         let selectedNetwork = network
+        let request = generation
         do {
             try await engine.checkPassword(password)
+            guard request == generation, unlocked, selectedNetwork == network else { return false }
             try await BiometricStore.shared.save(password, network: selectedNetwork)
+            guard request == generation, unlocked, selectedNetwork == network else {
+                await BiometricStore.shared.remove(network: selectedNetwork)
+                return false
+            }
             UserDefaults.standard.set(true, forKey: biometricKey)
             biometricEnabled = true
             return true
