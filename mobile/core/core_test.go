@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pearl-research-labs/pearl/node/btcec/schnorr"
 	"github.com/pearl-research-labs/pearl/node/btcutil"
 	"github.com/pearl-research-labs/pearl/node/chaincfg"
+	"github.com/pearl-research-labs/pearl/node/txscript"
 	neutrino "github.com/pearl-research-labs/pearl/spv"
 	bip39 "github.com/tyler-smith/go-bip39"
 )
@@ -34,6 +36,12 @@ func TestEncryptedWalletRoundTrip(t *testing.T) {
 	if err := CheckPassword(password); err != nil || !active.Locked() {
 		t.Fatalf("new wallet password check did not relock: %v", err)
 	}
+	if exported, err := ExportMnemonic(password); err != nil || exported != phrase || !active.Locked() {
+		t.Fatalf("recovery phrase export failed or left keys unlocked: %v", err)
+	}
+	if _, err := ExportMnemonic("wrong-password"); err == nil {
+		t.Fatal("exported recovery phrase with wrong password")
+	}
 	if _, err := Initialize(root, "mainnet"); err == nil {
 		t.Fatal("switched an open wallet")
 	}
@@ -47,9 +55,25 @@ func TestEncryptedWalletRoundTrip(t *testing.T) {
 	if bytes.Contains(data, []byte(phrase)) || bytes.Contains(data, []byte(password)) {
 		t.Fatal("plaintext secret persisted")
 	}
+	vault, err := os.ReadFile(recoveryPhrasePath(filepath.Join(root, "testnet2")))
+	if err != nil || bytes.Contains(vault, []byte(phrase)) || bytes.Contains(vault, []byte(password)) {
+		t.Fatalf("recovery vault contains plaintext or is missing: %v", err)
+	}
 	exists, err = Initialize(root, "testnet2")
 	if err != nil || !exists {
 		t.Fatalf("wallet missing after close: %v", err)
+	}
+	if err := OpenForNotifications(); err != nil {
+		t.Fatal(err)
+	}
+	if !active.Locked() {
+		t.Fatal("background open unlocked signing keys")
+	}
+	if _, err := Status(); err != nil {
+		t.Fatal(err)
+	}
+	if err := Close(); err != nil {
+		t.Fatal(err)
 	}
 	if err := Open("wrong-password"); err == nil {
 		t.Fatal("opened with wrong password")
@@ -101,6 +125,29 @@ func TestEncryptedWalletRoundTrip(t *testing.T) {
 	if _, err := btcutil.DecodeAddress(address, &chaincfg.TestNet2Params); err != nil {
 		t.Fatal(err)
 	}
+	keyJSON, err := ExportPrivateKey(password)
+	if err != nil || !active.Locked() {
+		t.Fatalf("private key export failed or left keys unlocked: %v", err)
+	}
+	var exportedKey struct {
+		Address string
+		WIF     string
+	}
+	if err := json.Unmarshal([]byte(keyJSON), &exportedKey); err != nil || exportedKey.Address != address || exportedKey.WIF == "" {
+		t.Fatalf("incorrect private key export: %v", err)
+	}
+	wif, err := btcutil.DecodeWIF(exportedKey.WIF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taprootKey := txscript.ComputeTaprootKeyNoScript(wif.PrivKey.PubKey())
+	derivedAddress, err := btcutil.NewAddressTaproot(schnorr.SerializePubKey(taprootKey), &chaincfg.TestNet2Params)
+	if err != nil || derivedAddress.EncodeAddress() != address {
+		t.Fatalf("exported key does not derive the current receiving address: %v", err)
+	}
+	if _, err := ExportPrivateKey("wrong-password"); err == nil {
+		t.Fatal("exported private key with wrong password")
+	}
 	if err := Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +158,12 @@ func TestEncryptedWalletRoundTrip(t *testing.T) {
 	reopenedAddress, err := ReceiveAddress()
 	if err != nil || address != reopenedAddress {
 		t.Fatalf("receive address changed after restart: %v", err)
+	}
+	if err := os.Remove(recoveryPhrasePath(filepath.Join(root, "testnet2"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ExportMnemonic(password); err == nil || !active.Locked() {
+		t.Fatalf("legacy wallet should report missing phrase without leaving keys unlocked: %v", err)
 	}
 	if err := Close(); err != nil {
 		t.Fatal(err)

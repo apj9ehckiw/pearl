@@ -73,7 +73,7 @@ func GenerateMnemonic() (string, error) {
 }
 
 // Create restores a BIP39 wallet. birthday=0 scans from genesis.
-// The mnemonic is never persisted; the upstream database encrypts private keys.
+// The encrypted mnemonic vault is kept alongside the upstream wallet database.
 func Create(mnemonic, password string, birthday int64) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -93,14 +93,70 @@ func Create(mnemonic, password string, birthday int64) error {
 	if birthday < 0 || birthday > time.Now().Unix() {
 		return errors.New("invalid wallet birthday")
 	}
+	exists, err := loader.WalletExists()
+	if err != nil {
+		return err
+	}
+	if exists {
+		return errors.New("wallet already exists")
+	}
+	// A previous interrupted creation can leave an orphaned vault without a
+	// wallet database. It is unusable and must not block a fresh creation.
+	_ = os.Remove(recoveryPhrasePath(directory))
+	_ = os.Remove(recoveryPhrasePath(directory) + ".tmp")
+	if err := saveRecoveryPhrase(directory, params.Name, mnemonic, password); err != nil {
+		return err
+	}
 	seed := bip39.NewSeed(mnemonic, "")
 	defer clear(seed)
 	w, err := loader.CreateNewWallet([]byte(wallet.InsecurePubPassphrase), []byte(password), seed, time.Unix(birthday, 0))
 	if err != nil {
+		_ = os.Remove(recoveryPhrasePath(directory))
 		return err
 	}
 	active = w
 	return nil
+}
+
+// ExportMnemonic requires the wallet password even if the app was unlocked by
+// biometrics. Wallets created before the recovery vault existed have no phrase
+// to export: a BIP39 phrase cannot be reconstructed from its derived HD key.
+func ExportMnemonic(password string) (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if active == nil {
+		return "", errors.New("wallet is closed")
+	}
+	if err := active.Unlock([]byte(password), nil); err != nil {
+		return "", err
+	}
+	defer active.Lock()
+	return readRecoveryPhrase(directory, params.Name, password)
+}
+
+// ExportPrivateKey returns the WIF for the current BIP86 receiving address.
+// This is the internal key, so importing it into another wallet requires
+// software that supports Taproot/BIP86 key tweaking.
+func ExportPrivateKey(password string) (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if active == nil {
+		return "", errors.New("wallet is closed")
+	}
+	if err := active.Unlock([]byte(password), nil); err != nil {
+		return "", err
+	}
+	defer active.Lock()
+	addr, err := active.CurrentAddress(waddrmgr.DefaultAccountNum, waddrmgr.KeyScopeBIP0086)
+	if err != nil {
+		return "", err
+	}
+	wif, err := active.DumpWIFPrivateKey(addr)
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(map[string]string{"address": addr.EncodeAddress(), "wif": wif})
+	return string(encoded), err
 }
 
 // Open verifies the private passphrase and immediately relocks signing keys.
@@ -122,6 +178,26 @@ func Open(password string) error {
 		return err
 	}
 	w.Lock()
+	active = w
+	return nil
+}
+
+// OpenForNotifications loads only the public wallet state. Private signing keys
+// remain locked, allowing an opportunistic iOS background refresh without
+// retaining the user's password in memory or on disk.
+func OpenForNotifications() error {
+	mu.Lock()
+	defer mu.Unlock()
+	if loader == nil {
+		return errors.New("initialize first")
+	}
+	if active != nil {
+		return errors.New("wallet already open")
+	}
+	w, err := loader.OpenExistingWallet([]byte(wallet.InsecurePubPassphrase), false)
+	if err != nil {
+		return err
+	}
 	active = w
 	return nil
 }

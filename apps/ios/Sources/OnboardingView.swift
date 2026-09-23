@@ -21,7 +21,7 @@ struct OnboardingView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    Image(systemName: "circle.hexagongrid.fill").font(.system(size: 64)).foregroundStyle(.teal).padding(.top, 30)
+                    WalletEmblem().frame(width: 80, height: 80).padding(.top, 30)
                     Text(wallet.exists ? "欢迎回来" : "你的 Pearl，\n由你掌握")
                         .font(.system(size: 40, weight: .semibold, design: .rounded))
                     Text(wallet.exists ? "解锁这台设备上的钱包。" : "独立钱包，私钥只保存在本机。")
@@ -105,5 +105,24 @@ struct OnboardingView: View {
 
     private func reset() {
         password = ""; confirmation = ""; phrase = ""; verification = ""; backedUp = false; saveBiometric = false; mode = "welcome"
+    }
+}
+
+private struct WalletEmblem: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18)
+                .fill(LinearGradient(colors: [.teal, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 74, height: 58).offset(y: 7)
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.white.opacity(0.30))
+                .frame(width: 55, height: 12).offset(x: -5, y: -19)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.teal)
+                .shadow(color: .black.opacity(0.15), radius: 2, y: 2)
+                .frame(width: 34, height: 28).offset(x: 24, y: 6)
+            Circle().fill(.white).frame(width: 8, height: 8).offset(x: 25, y: 6)
+        }
+        .accessibilityLabel("钱包图标")
     }
 }

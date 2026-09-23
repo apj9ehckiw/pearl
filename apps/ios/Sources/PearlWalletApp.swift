@@ -10,6 +10,8 @@ struct PearlWalletApp: App {
     @State private var checkingForeground = false
     @State private var wasBackgrounded = false
 
+    init() { BackgroundNotifications.register() }
+
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -33,6 +35,7 @@ struct PearlWalletApp: App {
                 if phase != .active { checkingForeground = true }
                 if phase == .background {
                     wasBackgrounded = true
+                    BackgroundNotifications.schedule()
                     if lockImmediatelyOnBackground {
                         let task = UIApplication.shared.beginBackgroundTask(withName: "锁定 Pearl 钱包")
                         Task {

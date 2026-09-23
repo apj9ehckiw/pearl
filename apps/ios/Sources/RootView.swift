@@ -179,7 +179,9 @@ struct SettingsView: View {
     @AppStorage("appearance") private var appearance = "system"
     @AppStorage("autoLockMinutes") private var autoLockMinutes = 5
     @AppStorage("lockImmediatelyOnBackground") private var lockImmediatelyOnBackground = false
+    @AppStorage("backgroundNotificationsEnabled") private var backgroundNotificationsEnabled = false
     @State private var setupPassword = ""
+    @State private var showExport = false
     var body: some View {
         NavigationStack {
             Form {
@@ -219,6 +221,8 @@ struct SettingsView: View {
                     }
                     Text("请离线保存恢复短语。应用数据不会备份到 iCloud；删除应用会移除本机钱包。")
                         .font(.footnote).foregroundStyle(.secondary)
+                    Button("导出助记词或私钥") { showExport = true }
+                        .disabled(wallet.busy)
                     Button("锁定钱包") { Task { await wallet.lock() } }
                 }
                 Section("自动锁定") {
@@ -229,12 +233,30 @@ struct SettingsView: View {
                     Text("关闭立即锁定时，返回应用只会在超过设定的闲置时间后要求重新解锁。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                Section("通知") {
+                    Toggle("后台收款提醒", isOn: $backgroundNotificationsEnabled)
+                        .onChange(of: backgroundNotificationsEnabled) { enabled in
+                            if enabled {
+                                Task {
+                                    if await BackgroundNotifications.requestPermission() {
+                                        BackgroundNotifications.schedule()
+                                    } else {
+                                        backgroundNotificationsEnabled = false
+                                        wallet.error = "未获得通知权限。请在 iOS 设置中允许 Pearl 钱包通知。"
+                                    }
+                                }
+                            } else { BackgroundNotifications.cancel() }
+                        }
+                    Text("手机会在系统允许的后台刷新时检查新收款，提醒可能延迟；无需上传地址或私钥。通知不显示金额和地址。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Section("关于") {
-                    Text("Pearl Wallet iOS · 0.3.0")
+                    Text("Pearl Wallet iOS · 0.4.0")
                     Text("社区分支 · 基于 Oyster 与 Pearl SPV")
                     Link("查看源代码", destination: URL(string: "https://github.com/apj9ehckiw/pearl/tree/codex/ios-wallet/apps/ios")!)
                 }
             }.navigationTitle("设置")
+                .sheet(isPresented: $showExport) { SecretExportView() }
                 .onChange(of: phase) { value in if value == .background { setupPassword = "" } }
         }
     }

@@ -21,12 +21,20 @@ fork, not an official Pearl Research Labs release.
   tab bar remains on earlier iOS versions.
 - Privacy cover when inactive, idle auto-lock after a user-selected 1–60 minutes,
   and an optional immediate lock when the app backgrounds.
+- Optional private local notifications for new incoming transactions. iOS schedules
+  opportunistic background refreshes, so delivery can be delayed or skipped.
+- Password-gated export of the encrypted recovery phrase or the current BIP86
+  receiving address's internal WIF key. Exported content hides after one minute.
 - App data excluded from cloud backup. Keep the recovery phrase offline.
 
-The app must stay in the foreground to sync. Restoring scans from genesis, which
-can take time and storage. If the app is suspended, synchronization resumes when
-it becomes active. Locking closes the database and peer connections. No RPC port
-is opened on the phone.
+The app should stay in the foreground for initial synchronization. Restoring scans
+from genesis, which can take time and storage. Background refresh is short and
+system-controlled; synchronization resumes when the app becomes active. Locking
+closes the database and peer connections. No RPC port is opened on the phone.
+The encrypted recovery phrase is saved only for wallets created or imported by
+this version. Earlier wallet databases cannot reconstruct the original BIP39
+words; use the offline backup made at creation. The single-address WIF needs a
+wallet that handles BIP86 Taproot tweaking and cannot restore the whole wallet.
 If biometrics change or are unavailable, unlock with the wallet password and
 enable biometric unlock again. Biometric credentials are separate per network
 and do not migrate to another device.
@@ -81,8 +89,9 @@ are not committed. Build from a clean checkout when rebuilding the XCFramework.
 ## Validation
 
 `go test ./mobile/core` checks BIP39 generation, network/amount validation and
-lifecycle guards, password verification and key relocking, encrypted database reopen, offline SPV shutdown and receiving
-address persistence without native libraries. The iOS workflow builds with both
+lifecycle guards, password verification and key relocking, encrypted recovery
+export, watch-mode opening, offline SPV shutdown and receiving address/key
+derivation without native libraries. The iOS workflow builds with both
 `xmss,zkpow` production tags and executes XCTest amount parsing tests on a simulator.
 Building successfully does not constitute a real-funds or mainnet recovery test;
 verify Face ID / Touch ID on an enrolled physical device, restore,

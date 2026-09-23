@@ -111,7 +111,11 @@ final class WalletModel: ObservableObject {
         guard request == generation else { return }
         receiveAddress = address
         let result = try await engine.status()
-        if request == generation { snapshot = result }
+        if request == generation {
+            snapshot = result
+            await BackgroundNotifications.record(result, network: network,
+                                                 alert: UIApplication.shared.applicationState == .background)
+        }
     }
 
     func refresh() async {
@@ -119,7 +123,11 @@ final class WalletModel: ObservableObject {
         let request = generation
         do {
             let result = try await engine.status()
-            if request == generation { snapshot = result }
+            if request == generation {
+                snapshot = result
+                await BackgroundNotifications.record(result, network: network,
+                                                     alert: UIApplication.shared.applicationState == .background)
+            }
         } catch { if request == generation { self.error = message(error) } }
     }
 
@@ -197,6 +205,29 @@ final class WalletModel: ObservableObject {
         }
     }
 
+    func exportSecret(kind: WalletExportKind, password: String) async -> WalletSecret? {
+        guard unlocked, !busy, !password.isEmpty else { return nil }
+        busy = true
+        defer { busy = false }
+        let request = generation
+        do {
+            let secret: WalletSecret
+            switch kind {
+            case .mnemonic:
+                secret = WalletSecret(value: try await engine.exportMnemonic(password: password), address: nil)
+            case .privateKey:
+                let key = try await engine.exportPrivateKey(password: password)
+                secret = WalletSecret(value: key.wif, address: key.address)
+            }
+            guard request == generation, unlocked else { return nil }
+            noteActivity()
+            return secret
+        } catch {
+            self.error = message(error)
+            return nil
+        }
+    }
+
     private func message(_ error: Error) -> String {
         if let error = error as? BiometricStoreError { return error.localizedDescription }
         let detail = error.localizedDescription
@@ -211,10 +242,23 @@ final class WalletModel: ObservableObject {
         if lower.contains("fee must") { return "手续费率超出允许范围。" }
         if lower.contains("wallet is closed") { return "钱包已锁定，请重新解锁。" }
         if lower.contains("wallet already open") { return "钱包已经打开。" }
+        if lower.contains("recovery phrase unavailable") { return "此钱包创建时未保存原助记词，无法从现有密钥还原。请使用创建时离线备份的 24 个词。" }
+        if lower.contains("recovery phrase vault") { return "恢复短语加密文件无法读取，请使用离线备份恢复。" }
         if lower.contains("at least 10 characters") { return "钱包密码至少需要 10 个字符。" }
         if lower.contains("wallet synchronization") { return "请等待钱包同步完成。" }
         return "操作失败，请检查网络连接或稍后重试。"
     }
+}
+
+enum WalletExportKind: String, CaseIterable, Identifiable {
+    case mnemonic = "助记词"
+    case privateKey = "当前地址私钥"
+    var id: String { rawValue }
+}
+
+struct WalletSecret {
+    let value: String
+    let address: String?
 }
 
 enum AutoLockPolicy {
