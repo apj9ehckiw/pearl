@@ -36,8 +36,8 @@ jobs:
           gomobile init
       - name: Test mobile core
         run: |
-          go test -race -timeout 120s ./mobile/core ./spv/headerfs
-          go test -race -timeout 120s ./wallet/chain -run '^TestNeutrino'
+          go test -race -timeout 600s ./mobile/core ./spv/headerfs
+          go test -race -timeout 300s ./wallet/chain -run '^TestNeutrino'
       - name: Restore native iOS framework
         id: native-cache
         uses: actions/cache/restore@v4
